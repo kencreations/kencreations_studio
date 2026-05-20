@@ -5,6 +5,7 @@ export interface TextLine {
   size: number;
   depth: number;
   color?: string;
+  letterSpacing?: number;
 }
 
 export interface AppState {

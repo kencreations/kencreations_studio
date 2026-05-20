@@ -32,9 +32,9 @@ const Editor: React.FC = () => {
             },
         ],
         lineSpacing: 2.0,
-        textColor: "#1f2937",
-        borderColor: "#1f2937",
-        baseColor: "#ffffff",
+        textColor: "#000000",
+        borderColor: "#000000",
+        baseColor: "#FFFFFF",
         laceHole: { enabled: true, width: 15, height: 2, topMargin: 3 },
         shape: {
             autoSize: true,
@@ -74,9 +74,9 @@ const Editor: React.FC = () => {
             },
         ],
         lineSpacing: 2.0,
-        textColor: "#5d4037",
-        borderColor: "#5d4037",
-        baseColor: "#e8ddd5",
+        textColor: "#6F5034",
+        borderColor: "#6F5034",
+        baseColor: "#F7E6DE",
         laceHole: { enabled: true, width: 11.0, height: 4.5, topMargin: 2.0 },
         shape: {
             autoSize: true,
@@ -164,7 +164,7 @@ const Editor: React.FC = () => {
                 </a>
             </div>
 
-            <Sidebar state={state} updateState={updateState} bounds={bounds} />
+            <Sidebar state={state} updateState={updateState} bounds={bounds} isDesign2={isDesign2} />
 
             <main className="canvas-container">
                 {/* HUD Dimensions */}

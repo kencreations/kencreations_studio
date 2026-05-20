@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { FontLoader, Font } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
+import { createTextGeometryWithSpacing } from '../utils/textEngine';
 import type { AppState } from '../types';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -155,7 +156,7 @@ const Generator: React.FC<SceneProps> = ({ state, meshRef, onBoundsChange }) => 
 
         for (const line of s.lines) {
           if (!line.text.trim()) continue;
-          const geo = new TextGeometry(line.text, { font: loadedFonts[line.font], size: line.size, depth: line.depth, curveSegments: 4, bevelEnabled: false });
+          const geo = createTextGeometryWithSpacing(line.text, loadedFonts[line.font], line.size, line.depth, line.letterSpacing || 0);
           geo.computeBoundingBox();
           const tw = geo.boundingBox!.max.x - geo.boundingBox!.min.x;
           maxTextWidth = Math.max(maxTextWidth, tw);

@@ -7,6 +7,7 @@ import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { Evaluator, Brush, SUBTRACTION, ADDITION } from "three-bvh-csg";
 import type { AppState } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
+import { createTextGeometryWithSpacing } from "../utils/textEngine";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { TTFLoader } from "three/examples/jsm/loaders/TTFLoader.js";
 
@@ -94,13 +95,13 @@ const Generator2: React.FC<SceneProps> = ({
 
                 const createTextRaw = (line: any) => {
                     if (!line?.text.trim()) return null;
-                    const g = new TextGeometry(line.text, {
-                        font: fonts[line.font],
-                        size: line.size,
-                        depth: line.depth || 0.6,
-                        curveSegments: 4,
-                        bevelEnabled: false,
-                    });
+                    const g = createTextGeometryWithSpacing(
+                        line.text,
+                        fonts[line.font],
+                        line.size,
+                        line.depth || 0.6,
+                        line.letterSpacing || 0
+                    );
                     g.computeBoundingBox();
                     const tw = g.boundingBox!.max.x - g.boundingBox!.min.x;
                     const th = g.boundingBox!.max.y - g.boundingBox!.min.y;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { AppState, TextLine } from '../types';
 import { FONTS } from '../types';
@@ -37,13 +37,112 @@ const BAMBU_COLORS = [
   { name: 'Black', hex: '#000000' }
 ];
 
+const EditableNumber = ({ value, onChange, min, max, step }: { value: number, onChange: (val: number) => void, min?: number, max?: number, step?: number }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempValue, setTempValue] = useState(value.toString());
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    setTempValue(value.toString());
+  }, [value]);
+
+  const commit = () => {
+    let num = parseFloat(tempValue);
+    if (isNaN(num)) num = value;
+    if (min !== undefined) num = Math.max(min, num);
+    if (max !== undefined) num = Math.min(max, num);
+    onChange(num);
+    setTempValue(num.toString());
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        ref={inputRef}
+        type="number"
+        value={tempValue}
+        onChange={e => setTempValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setIsEditing(false); }}
+        step={step || "any"}
+        className="editable-number-input"
+        style={{ width: '40px', fontSize: '11px', padding: '0', border: '1px solid #3b82f6', borderRadius: '2px', outline: 'none', background: 'transparent' }}
+      />
+    );
+  }
+
+  return (
+    <span className="control-value" onDoubleClick={() => setIsEditing(true)} onClick={() => setIsEditing(true)} style={{ cursor: 'pointer', borderBottom: '1px dashed #cbd5e1' }} title="Click to edit">
+      {value.toFixed(1)}
+    </span>
+  );
+};
+
+const ColorSelect = ({ value, onChange, colors }: { value: string, onChange: (val: string) => void, colors: {name: string, hex: string}[] }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedColor = colors.find(c => c.hex.toUpperCase() === (value || '').toUpperCase()) || colors[0];
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', flexGrow: 1 }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', backgroundColor: '#fff', fontSize: '12px', height: '28px' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: selectedColor.hex, border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0 }} />
+          <span>{selectedColor.name}</span>
+        </div>
+        <ChevronLeft size={14} style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
+      </div>
+      
+      {isOpen && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, maxHeight: '200px', overflowY: 'auto', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '4px', marginTop: '4px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+          {colors.map(c => (
+            <div 
+              key={c.hex} 
+              onClick={() => { onChange(c.hex); setIsOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', cursor: 'pointer', backgroundColor: c.hex.toUpperCase() === (value || '').toUpperCase() ? '#f3f4f6' : 'transparent' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = c.hex.toUpperCase() === (value || '').toUpperCase() ? '#f3f4f6' : 'transparent'}
+            >
+              <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: c.hex, border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0 }} />
+              <span style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface SidebarProps {
+  isDesign2?: boolean;
   state: AppState;
   updateState: (updates: Partial<AppState>) => void;
   bounds: { x: number; y: number; z: number };
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
+const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds, isDesign2 }) => {
   const moveLine = (index: number, direction: 'up' | 'down') => {
 // ... preserving rest of functions ...
     const newLines = [...state.lines];
@@ -121,21 +220,24 @@ const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
                 <div className="control-item">
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <div style={{ width: '20px', height: '20px', borderRadius: '4px', backgroundColor: line.color || state.textColor, border: '1px solid #d1d5db', flexShrink: 0 }} />
-                    <select value={(line.color || state.textColor).toUpperCase()} onChange={e => updateLine(idx, { color: e.target.value })} style={{ flexGrow: 1, padding: '4px' }}>
-                      {BAMBU_COLORS.map(c => <option key={c.hex} value={c.hex}>{c.name}</option>)}
-                    </select>
+                    <ColorSelect value={line.color || state.textColor} onChange={val => updateLine(idx, { color: val })} colors={BAMBU_COLORS} />
                   </div>
                 </div>
 
-                <div className="line-grid">
+                <div className="line-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div className="control-item">
-                    <label><span>Size</span><span className="control-value">{line.size.toFixed(1)}</span></label>
+                    <label><span>Size</span><EditableNumber value={line.size} onChange={val => updateLine(idx, { size: val })} min={2} max={30} step={0.5} /></label>
                     <input type="range" min={2} max={30} step={0.5} value={line.size} onChange={e => updateLine(idx, { size: parseFloat(e.target.value) })}/>
                   </div>
 
                   <div className="control-item">
-                    <label><span>Depth</span><span className="control-value">{line.depth.toFixed(1)}</span></label>
+                    <label><span>Depth</span><EditableNumber value={line.depth} onChange={val => updateLine(idx, { depth: val })} min={0.5} max={10} step={0.1} /></label>
                     <input type="range" min={0.5} max={10} step={0.1} value={line.depth} onChange={e => updateLine(idx, { depth: parseFloat(e.target.value) })}/>
+                  </div>
+                  
+                  <div className="control-item">
+                    <label><span>Spacing</span><EditableNumber value={line.letterSpacing || 0} onChange={val => updateLine(idx, { letterSpacing: val })} min={-5} max={20} step={0.5} /></label>
+                    <input type="range" min={-5} max={20} step={0.5} value={line.letterSpacing || 0} onChange={e => updateLine(idx, { letterSpacing: parseFloat(e.target.value) })}/>
                   </div>
                 </div>
               </div>
@@ -147,7 +249,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
           </button>
 
           <div className="control-item" style={{ marginTop: '12px', padding: '0 8px' }}>
-            <label><span>Line spacing</span><span className="control-value">{state.lineSpacing.toFixed(1)}</span></label>
+            <label><span>Line spacing</span><EditableNumber value={state.lineSpacing} onChange={val => updateState({ lineSpacing: val })} min={0} max={10} step={0.5} /></label>
             <input type="range" min={0} max={20} step={0.5} value={state.lineSpacing} onChange={e => updateState({ lineSpacing: parseFloat(e.target.value) })}/>
           </div>
         </div>
@@ -157,32 +259,19 @@ const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
         {/* COLORS SECTION */}
         <div className="control-group">
           <h2 className="control-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Palette size={14}/> Colors</h2>
-          <div className="line-grid">
-            <div className="control-item">
-              <label>Text</label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <div style={{ width: '20px', height: '20px', borderRadius: '4px', backgroundColor: state.textColor, border: '1px solid #d1d5db', flexShrink: 0 }} />
-                <select value={state.textColor.toUpperCase()} onChange={e => updateState({ textColor: e.target.value })} style={{ flexGrow: 1, padding: '4px' }}>
-                  {BAMBU_COLORS.map(c => <option key={c.hex} value={c.hex}>{c.name}</option>)}
-                </select>
-              </div>
-            </div>
+          <div className="line-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <div className="control-item">
               <label>Border</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <div style={{ width: '20px', height: '20px', borderRadius: '4px', backgroundColor: state.borderColor, border: '1px solid #d1d5db', flexShrink: 0 }} />
-                <select value={state.borderColor.toUpperCase()} onChange={e => updateState({ borderColor: e.target.value })} style={{ flexGrow: 1, padding: '4px' }}>
-                  {BAMBU_COLORS.map(c => <option key={c.hex} value={c.hex}>{c.name}</option>)}
-                </select>
+                <ColorSelect value={state.borderColor} onChange={val => updateState({ borderColor: val })} colors={BAMBU_COLORS} />
               </div>
             </div>
-            <div className="control-item" style={{ gridColumn: 'span 2' }}>
+            <div className="control-item">
               <label>Base Plate</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <div style={{ width: '20px', height: '20px', borderRadius: '4px', backgroundColor: state.baseColor, border: '1px solid #d1d5db', flexShrink: 0 }} />
-                <select value={state.baseColor.toUpperCase()} onChange={e => updateState({ baseColor: e.target.value })} style={{ flexGrow: 1, padding: '4px' }}>
-                  {BAMBU_COLORS.map(c => <option key={c.hex} value={c.hex}>{c.name}</option>)}
-                </select>
+                <ColorSelect value={state.baseColor} onChange={val => updateState({ baseColor: val })} colors={BAMBU_COLORS} />
               </div>
             </div>
           </div>
@@ -214,7 +303,7 @@ const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
               </div>
 
               <div className="control-item" style={{ marginBottom: '12px' }}>
-                <label><span>Padding</span><span className="control-value">{state.shape.padding.toFixed(1)}</span></label>
+                <label><span>Padding</span><EditableNumber value={state.shape.padding} onChange={val => updateShape({ padding: val })} min={0} max={50} step={1} /></label>
                 <input type="range" min={2} max={30} step={1} value={state.shape.padding} onChange={e => updateState({ shape: { ...state.shape, padding: parseFloat(e.target.value) } })}/>
               </div>
 
@@ -246,11 +335,11 @@ const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase' }}>Waves</span>
             <div className="line-grid" style={{ marginTop: '12px' }}>
               <div className="control-item">
-                <label><span>Amplitude</span><span className="control-value">{state.shape.amplitude.toFixed(1)}</span></label>
+                <label><span>Amplitude</span><EditableNumber value={state.shape.amplitude} onChange={val => updateShape({ amplitude: val })} min={0} max={20} step={0.5} /></label>
                 <input type="range" min={0} max={10} step={0.5} value={state.shape.amplitude} onChange={e => updateState({ shape: { ...state.shape, amplitude: parseFloat(e.target.value) } })}/>
               </div>
               <div className="control-item">
-                <label><span>Wavelength</span><span className="control-value">{state.shape.wavelength.toFixed(1)}</span></label>
+                <label><span>Wavelength</span><EditableNumber value={state.shape.wavelength} onChange={val => updateShape({ wavelength: val })} min={0} max={100} step={1} /></label>
                 <input type="range" min={0} max={50} step={1} value={state.shape.wavelength} onChange={e => updateState({ shape: { ...state.shape, wavelength: parseFloat(e.target.value) } })}/>
               </div>
             </div>
@@ -287,11 +376,11 @@ const Sidebar: React.FC<SidebarProps> = ({ state, updateState, bounds }) => {
           {state.laceHole.enabled && (
             <div className="line-grid" style={{ marginTop: '8px' }}>
               <div className="control-item">
-                <label><span>Width</span><span className="control-value">{state.laceHole.width.toFixed(1)}</span></label>
+                <label><span>Width</span><EditableNumber value={state.laceHole.width} onChange={val => updateLaceHole({ width: val })} min={2} max={50} step={1} /></label>
                 <input type="range" min={2} max={30} step={0.5} value={state.laceHole.width} onChange={e => updateState({ laceHole: { ...state.laceHole, width: parseFloat(e.target.value) } })}/>
               </div>
               <div className="control-item">
-                <label><span>Height</span><span className="control-value">{state.laceHole.height.toFixed(1)}</span></label>
+                <label><span>Height</span><EditableNumber value={state.laceHole.height} onChange={val => updateLaceHole({ height: val })} min={2} max={50} step={1} /></label>
                 <input type="range" min={2} max={10} step={0.5} value={state.laceHole.height} onChange={e => updateState({ laceHole: { ...state.laceHole, height: parseFloat(e.target.value) } })}/>
               </div>
               <div className="control-item" style={{ gridColumn: 'span 2' }}>
