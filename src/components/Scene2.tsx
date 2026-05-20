@@ -25,10 +25,9 @@ const Generator2: React.FC<SceneProps> = ({
 }) => {
     const [baseGeo, setBaseGeo] = useState<THREE.BufferGeometry | null>(null);
     const [frameGeo, setFrameGeo] = useState<THREE.BufferGeometry | null>(null);
-    const [centerTextGeo, setCenterTextGeo] =
-        useState<THREE.BufferGeometry | null>(null);
-    const [bannerTextGeo, setBannerTextGeo] =
-        useState<THREE.BufferGeometry | null>(null);
+    const [topText, setTopText] = useState<{g: THREE.BufferGeometry, color: string} | null>(null);
+    const [centerText, setCenterText] = useState<{g: THREE.BufferGeometry, color: string} | null>(null);
+    const [bottomText, setBottomText] = useState<{g: THREE.BufferGeometry, color: string} | null>(null);
 
     const ds = useDebounce(state, 200);
 
@@ -215,19 +214,9 @@ const Generator2: React.FC<SceneProps> = ({
                 if (!active) return;
 
                 // Finalize
-                setCenterTextGeo(rawCenter ? rawCenter.g : null);
-
-                const bannerGeos = [rawTop?.g, rawBottom?.g].filter(
-                    (g) => !!g,
-                ) as THREE.BufferGeometry[];
-                if (bannerGeos.length > 0) {
-                    const merged =
-                        BufferGeometryUtils.mergeGeometries(bannerGeos);
-                    merged.computeVertexNormals();
-                    setBannerTextGeo(merged);
-                } else {
-                    setBannerTextGeo(null);
-                }
+                setTopText(rawTop ? { g: rawTop.g, color: topLine?.color || ds.baseColor } : null);
+                setCenterText(rawCenter ? { g: rawCenter.g, color: nameLine?.color || ds.borderColor } : null);
+                setBottomText(rawBottom ? { g: rawBottom.g, color: bottomLine?.color || ds.baseColor } : null);
 
                 const maxD = Math.max(...s.lines.map((l) => l.depth || 0.6));
                 const tabHeight = s.laceHole.enabled ? 8.75 : 0;
@@ -270,22 +259,33 @@ const Generator2: React.FC<SceneProps> = ({
                     </mesh>
                 )}
 
-                {/* Center Text (Inside cutout, sits on white base, colored brown) */}
-                {centerTextGeo && (
-                    <mesh geometry={centerTextGeo} castShadow receiveShadow>
+                {/* Center Text (Inside cutout, sits on white base) */}
+                {centerText && (
+                    <mesh geometry={centerText.g} castShadow receiveShadow>
                         <meshStandardMaterial
-                            color={ds.borderColor || "#4a3525"}
+                            color={centerText.color}
                             roughness={0.25}
                             metalness={0.05}
                         />
                     </mesh>
                 )}
 
-                {/* Banner Texts (Sits elevated on brown frame, colored white) */}
-                {bannerTextGeo && (
-                    <mesh geometry={bannerTextGeo} castShadow receiveShadow>
+                {/* Top Text (Sits elevated on brown frame) */}
+                {topText && (
+                    <mesh geometry={topText.g} castShadow receiveShadow>
                         <meshStandardMaterial
-                            color={ds.baseColor || "#ffffff"}
+                            color={topText.color}
+                            roughness={0.25}
+                            metalness={0.05}
+                        />
+                    </mesh>
+                )}
+
+                {/* Bottom Text (Sits elevated on brown frame) */}
+                {bottomText && (
+                    <mesh geometry={bottomText.g} castShadow receiveShadow>
+                        <meshStandardMaterial
+                            color={bottomText.color}
                             roughness={0.25}
                             metalness={0.05}
                         />
