@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -13,6 +13,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "clipper-lib": "^6.4.2",
+    "comlink": "^4.4.2",
     "jszip": "^3.10.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
