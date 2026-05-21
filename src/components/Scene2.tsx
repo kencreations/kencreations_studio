@@ -24,7 +24,6 @@ const Generator2: React.FC<SceneProps> = ({
     meshRef,
     onBoundsChange,
 }) => {
-    // Keeping all parts separate so they export as distinct components in the 3MF
     const [baseGeo, setBaseGeo] = useState<THREE.BufferGeometry | null>(null);
     const [frameGeo, setFrameGeo] = useState<THREE.BufferGeometry | null>(null);
     const [topText, setTopText] = useState<{
@@ -90,28 +89,26 @@ const Generator2: React.FC<SceneProps> = ({
                         bottomLine = s.lines[maxIndex + 1];
                 }
 
-                // Helper: Generates Text and adds 0.1mm depth for intersecting overlap
+                // FIX 1: Exact geometry depth, NO overlaps.
                 const createTextRaw = (line: any) => {
                     if (!line?.text.trim()) return null;
                     let g = createTextGeometryWithSpacing(
                         line.text,
                         fonts[line.font],
                         line.size,
-                        (line.depth || 0.6) + 0.1, // +0.1 to sink it into the layer below
+                        line.depth || 0.6, // Exact depth, no +0.1mm overlap
                         line.letterSpacing || 0,
                     );
 
-                    // CRITICAL: Weld vertices to prevent non-manifold edges
                     g = BufferGeometryUtils.mergeVertices(g);
                     g.computeBoundingBox();
 
                     const tw = g.boundingBox!.max.x - g.boundingBox!.min.x;
-                    const th = g.boundingBox!.max.y - g.boundingBox!.min.y;
                     const cx =
                         (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2;
                     const cy =
                         (g.boundingBox!.min.y + g.boundingBox!.max.y) / 2;
-                    return { g, tw, th, cx, cy, line };
+                    return { g, tw, cx, cy, line };
                 };
 
                 const rawTop = createTextRaw(topLine);
@@ -164,7 +161,7 @@ const Generator2: React.FC<SceneProps> = ({
                 const baseThick = s.shape.baseThickness || 3.0;
                 const frameThick = s.shape.topBorder || 1.6;
 
-                // --- Geometries with Overlaps ---
+                // FIX 2: Exact Extrusions, perfectly flush
                 let rawBase = new THREE.ExtrudeGeometry(
                     createDynamicBaseShape(bw, bh, cornerR),
                     {
@@ -173,7 +170,7 @@ const Generator2: React.FC<SceneProps> = ({
                         curveSegments: 16,
                     },
                 );
-                rawBase.translate(0, 0, -baseThick);
+                rawBase.translate(0, 0, -baseThick); // Sits beneath Z=0
                 rawBase = BufferGeometryUtils.mergeVertices(rawBase);
                 rawBase.computeVertexNormals();
                 setBaseGeo(rawBase);
@@ -189,46 +186,43 @@ const Generator2: React.FC<SceneProps> = ({
                         s.shape.innerRadius ?? 20,
                     ),
                     {
-                        depth: frameThick + 0.1, // Extrude extra 0.1mm
+                        depth: frameThick, // Exact thickness
                         bevelEnabled: false,
                         curveSegments: 16,
                     },
                 );
-                rawFrame.translate(0, 0, -0.1); // Sink Frame into Base by 0.1mm
+                rawFrame.translate(0, 0, 0); // Sits exactly flush on top of Baseplate (Z=0)
                 rawFrame = BufferGeometryUtils.mergeVertices(rawFrame);
                 rawFrame.computeVertexNormals();
                 setFrameGeo(rawFrame);
 
-                // --- Position Text Geometries (Sink by 0.1mm) ---
                 const topTextY = bh / 2 - topBandH / 2;
                 const botTextY = -bh / 2 + botBandH / 2;
                 const centerTextY = (botBandH - topBandH) / 2;
 
+                // FIX 3: Place text exactly on the surfaces, no sinking.
                 if (rawTop) {
-                    // Start at frameThick, sink -0.1mm into frame
                     rawTop.g.translate(
                         -rawTop.cx,
                         topTextY - rawTop.line.size * 0.35,
-                        frameThick - 0.1,
-                    );
+                        frameThick,
+                    ); // Flush on Frame
                     rawTop.g.computeVertexNormals();
                 }
                 if (rawCenter) {
-                    // Sink -0.1mm into base
                     rawCenter.g.translate(
                         -rawCenter.cx,
                         centerTextY - rawCenter.cy,
-                        -0.1,
-                    );
+                        0,
+                    ); // Flush on Baseplate
                     rawCenter.g.computeVertexNormals();
                 }
                 if (rawBottom) {
-                    // Start at frameThick, sink -0.1mm into frame
                     rawBottom.g.translate(
                         -rawBottom.cx,
                         botTextY - rawBottom.line.size * 0.35,
-                        frameThick - 0.1,
-                    );
+                        frameThick,
+                    ); // Flush on Frame
                     rawBottom.g.computeVertexNormals();
                 }
 
@@ -277,7 +271,7 @@ const Generator2: React.FC<SceneProps> = ({
     return (
         <Center disableZ>
             <group ref={meshRef}>
-                {/* Tagged with explicit names for Bambu Studio */}
+                {/* FIX 4: Explicit names so Bambu Studio labels them correctly */}
                 {baseGeo && (
                     <mesh
                         name="Baseplate"
