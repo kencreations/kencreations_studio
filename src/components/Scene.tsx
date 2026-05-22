@@ -168,6 +168,7 @@ const Generator: React.FC<SceneProps> = ({
     meshRef,
     onBoundsChange,
 }) => {
+    const surfaceEpsilon = 0.08;
     const [textGeos, setTextGeos] = useState<
         { g: THREE.BufferGeometry; color: string }[]
     >([]);
@@ -213,6 +214,7 @@ const Generator: React.FC<SceneProps> = ({
                     s.laceHole.enabled && laceHoleType === "default";
                 const hasLoopTab =
                     s.laceHole.enabled && laceHoleType === "loop";
+                const skipTopWave = hasDefaultSlot || hasLoopTab;
 
                 // 1. Text Geometries (Merged securely via BufferGeometryUtils)
                 const textGeometries: THREE.BufferGeometry[] = [];
@@ -291,7 +293,11 @@ const Generator: React.FC<SceneProps> = ({
                 for (const { geo, minX, maxX, maxY, th } of lineGeometries) {
                     const offsetX = -((minX + maxX) / 2);
                     const offsetY = currentTop - maxY;
-                    geo.translate(offsetX, offsetY, s.shape.baseThickness / 2);
+                    geo.translate(
+                        offsetX,
+                        offsetY,
+                        s.shape.baseThickness / 2 - surfaceEpsilon,
+                    );
                     textGeometries.push(geo);
                     currentTop -= th + s.lineSpacing;
                 }
@@ -304,7 +310,7 @@ const Generator: React.FC<SceneProps> = ({
                     s.shape.cornerRadius,
                     s.shape.amplitude,
                     s.shape.wavelength,
-                    hasDefaultSlot,
+                    skipTopWave,
                 );
 
                 // Base Plate: Fully solid block from bottom to middle (Layer 1 Color)
@@ -329,7 +335,7 @@ const Generator: React.FC<SceneProps> = ({
                         innerR,
                         s.shape.amplitude,
                         s.shape.wavelength,
-                        hasDefaultSlot,
+                        skipTopWave,
                     );
 
                     const rawBorder = new THREE.ExtrudeGeometry(outerShape, {
@@ -337,7 +343,11 @@ const Generator: React.FC<SceneProps> = ({
                         bevelEnabled: false,
                         curveSegments: 16,
                     });
-                    rawBorder.translate(0, 0, s.shape.baseThickness / 2);
+                    rawBorder.translate(
+                        0,
+                        0,
+                        s.shape.baseThickness / 2 - surfaceEpsilon,
+                    );
 
                     const innerExtrude = new THREE.ExtrudeGeometry(innerShape, {
                         depth: s.shape.topBorder + 2,
@@ -359,6 +369,13 @@ const Generator: React.FC<SceneProps> = ({
                 }
 
                 let holeBrush: Brush | null = null;
+                const exportBrush = new Brush(rawBaseGeo.clone());
+                exportBrush.updateMatrixWorld();
+
+                if (borderBrush) {
+                    exportBrush.geometry = baseBrush.geometry.clone();
+                }
+
                 if (hasDefaultSlot) {
                     const hw = s.laceHole.width;
                     const hh = s.laceHole.height;
@@ -381,19 +398,18 @@ const Generator: React.FC<SceneProps> = ({
                         holeBrush,
                         SUBTRACTION,
                     );
-                    if (borderBrush) {
-                        borderBrush = evaluator.evaluate(
-                            borderBrush,
-                            holeBrush,
-                            SUBTRACTION,
-                        );
-                    }
+                    exportBrush.geometry = evaluator.evaluate(
+                        exportBrush,
+                        holeBrush,
+                        SUBTRACTION,
+                    ).geometry;
                 }
 
                 if (hasLoopTab) {
-                    const tabW = Math.max(s.laceHole.width + 6, 12);
-                    const tabH = Math.max(s.laceHole.height + 3, 6);
-                    const tabR = Math.min(tabH * 0.35, tabW / 2 - 0.1);
+                    const tabW = Math.max(s.laceHole.width + 5, 12);
+                    const tabH = Math.max(s.laceHole.height + 2.5, 5.5);
+                    const tabR = Math.min(tabH * 0.28, 1.6);
+                    const overlap = Math.max(1.2, s.shape.baseThickness * 0.6);
 
                     const tabShape = createBaseShape(tabW, tabH, tabR, 0, 0);
                     const tabGeo = new THREE.ExtrudeGeometry(tabShape, {
@@ -401,9 +417,13 @@ const Generator: React.FC<SceneProps> = ({
                         bevelEnabled: false,
                         curveSegments: 16,
                     });
-                    // Keep the tab mostly fused to the top edge so it looks like the reference tag.
-                    const tabY = bh / 2 + tabH * 0.32;
-                    tabGeo.translate(0, tabY, -s.shape.baseThickness / 2);
+                    // Force meaningful overlap with the main body to avoid non-manifold seam edges.
+                    const tabY = bh / 2 + tabH / 2 - overlap;
+                    tabGeo.translate(
+                        0,
+                        tabY,
+                        -s.shape.baseThickness / 2 + surfaceEpsilon,
+                    );
 
                     const tabBrush = new Brush(tabGeo);
                     tabBrush.updateMatrixWorld();
@@ -412,9 +432,19 @@ const Generator: React.FC<SceneProps> = ({
                         tabBrush,
                         ADDITION,
                     );
+                    const exportTab = new Brush(tabGeo.clone());
+                    exportTab.updateMatrixWorld();
+                    exportBrush.geometry = evaluator.evaluate(
+                        exportBrush,
+                        exportTab,
+                        ADDITION,
+                    ).geometry;
 
-                    const slotW = Math.min(s.laceHole.width, tabW - 4);
-                    const slotH = Math.min(s.laceHole.height, tabH * 0.42);
+                    const slotW = Math.min(s.laceHole.width, tabW - 3.2);
+                    const slotH = Math.max(
+                        1.2,
+                        Math.min(s.laceHole.height, tabH * 0.38),
+                    );
                     const slotR = slotH / 2;
                     const slotShape = createBaseShape(
                         slotW,
@@ -428,9 +458,10 @@ const Generator: React.FC<SceneProps> = ({
                         curveSegments: 16,
                         bevelEnabled: false,
                     });
-                    const slotY = tabY + tabH * 0.1;
+                    const slotY = tabY + tabH * 0.08;
                     slotGeo.translate(0, slotY, -s.shape.baseThickness * 5);
 
+                    slotGeo.translate(0, 0, 0);
                     holeBrush = new Brush(slotGeo);
                     holeBrush.updateMatrixWorld();
 
@@ -439,13 +470,11 @@ const Generator: React.FC<SceneProps> = ({
                         holeBrush,
                         SUBTRACTION,
                     );
-                    if (borderBrush) {
-                        borderBrush = evaluator.evaluate(
-                            borderBrush,
-                            holeBrush,
-                            SUBTRACTION,
-                        );
-                    }
+                    exportBrush.geometry = evaluator.evaluate(
+                        exportBrush,
+                        holeBrush,
+                        SUBTRACTION,
+                    ).geometry;
 
                     const tabTop = tabY + tabH / 2;
                     bh = Math.max(bh, tabTop * 2);
@@ -469,10 +498,23 @@ const Generator: React.FC<SceneProps> = ({
                         g: THREE.BufferGeometry;
                         color: string;
                     }[] = [];
+                    const holeBounds = holeBrush
+                        ? holeBrush.geometry.boundingBox ||
+                          (holeBrush.geometry.computeBoundingBox(),
+                          holeBrush.geometry.boundingBox)
+                        : null;
                     for (let i = 0; i < textGeometries.length; i++) {
                         let tb = new Brush(textGeometries[i]);
                         tb.updateMatrixWorld();
-                        if (holeBrush) {
+                        const textBounds =
+                            textGeometries[i].boundingBox ||
+                            (textGeometries[i].computeBoundingBox(),
+                            textGeometries[i].boundingBox);
+                        const intersectsHole =
+                            !!holeBounds &&
+                            !!textBounds &&
+                            textBounds.intersectsBox(holeBounds);
+                        if (holeBrush && intersectsHole) {
                             tb = evaluator.evaluate(tb, holeBrush, SUBTRACTION);
                         }
                         const fg = tb.geometry.clone();
@@ -507,40 +549,42 @@ const Generator: React.FC<SceneProps> = ({
     }, [debouncedState]);
 
     return (
-        <Center disableZ>
-            <group ref={meshRef}>
-                {baseGeo && (
-                    <mesh geometry={baseGeo} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={debouncedState.baseColor}
-                            roughness={0.3}
-                        />
-                    </mesh>
-                )}
-                {textGeos.map((tg, i) => (
-                    <mesh
-                        key={`txt-${i}`}
-                        geometry={tg.g}
-                        castShadow
-                        receiveShadow
-                    >
-                        <meshStandardMaterial
-                            color={tg.color}
-                            roughness={0.3}
-                            metalness={0.2}
-                        />
-                    </mesh>
-                ))}
-                {borderGeo && (
-                    <mesh geometry={borderGeo} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={debouncedState.borderColor}
-                            roughness={0.3}
-                        />
-                    </mesh>
-                )}
-            </group>
-        </Center>
+        <>
+            <Center disableZ>
+                <group ref={meshRef}>
+                    {baseGeo && (
+                        <mesh geometry={baseGeo} castShadow receiveShadow>
+                            <meshStandardMaterial
+                                color={debouncedState.baseColor}
+                                roughness={0.3}
+                            />
+                        </mesh>
+                    )}
+                    {textGeos.map((tg, i) => (
+                        <mesh
+                            key={`txt-${i}`}
+                            geometry={tg.g}
+                            castShadow
+                            receiveShadow
+                        >
+                            <meshStandardMaterial
+                                color={tg.color}
+                                roughness={0.3}
+                                metalness={0.2}
+                            />
+                        </mesh>
+                    ))}
+                    {borderGeo && (
+                        <mesh geometry={borderGeo} castShadow receiveShadow>
+                            <meshStandardMaterial
+                                color={debouncedState.borderColor}
+                                roughness={0.3}
+                            />
+                        </mesh>
+                    )}
+                </group>
+            </Center>
+        </>
     );
 };
 
