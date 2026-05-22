@@ -3,13 +3,16 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment, Grid, Center } from "@react-three/drei";
 import * as THREE from "three";
 import { FontLoader, Font } from "three/examples/jsm/loaders/FontLoader.js";
-import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
-import { Evaluator, Brush, SUBTRACTION, ADDITION } from "three-bvh-csg";
+import { Evaluator, Brush, ADDITION } from "three-bvh-csg";
 import type { AppState } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 import { createTextGeometryWithSpacing } from "../utils/textEngine";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { TTFLoader } from "three/examples/jsm/loaders/TTFLoader.js";
+import {
+    createDynamicBaseShape,
+    createDynamicFrameShape,
+} from "../utils/GeometryShapes";
 
 interface SceneProps {
     state: AppState;
@@ -17,29 +20,15 @@ interface SceneProps {
     onBoundsChange?: (bounds: { x: number; y: number; z: number }) => void;
 }
 
-import {
-    createDynamicBaseShape,
-    createDynamicFrameShape,
-} from "../utils/GeometryShapes";
-
 const Generator2: React.FC<SceneProps> = ({
     state,
     meshRef,
     onBoundsChange,
 }) => {
-    const [baseGeo, setBaseGeo] = useState<THREE.BufferGeometry | null>(null);
-    const [frameGeo, setFrameGeo] = useState<THREE.BufferGeometry | null>(null);
-    const [topText, setTopText] = useState<{
-        g: THREE.BufferGeometry;
-        color: string;
-    } | null>(null);
-    const [centerText, setCenterText] = useState<{
-        g: THREE.BufferGeometry;
-        color: string;
-    } | null>(null);
-    const [bottomText, setBottomText] = useState<{
-        g: THREE.BufferGeometry;
-        color: string;
+    // We only want ONE final, melted mesh to guarantee a perfect STL slice
+    const [mergedMesh, setMergedMesh] = useState<{
+        geometry: THREE.BufferGeometry;
+        material: THREE.Material | THREE.Material[];
     } | null>(null);
 
     const ds = useDebounce(state, 200);
@@ -73,15 +62,11 @@ const Generator2: React.FC<SceneProps> = ({
                 }
                 if (!active) return;
 
-                const ev = new Evaluator();
-
-                // --- 1. Generate Text Geometries & Measure First ---
                 let topLine: any = null;
                 let nameLine: any = null;
                 let bottomLine: any = null;
 
                 if (s.lines.length > 0) {
-                    // Find the index of the line with the largest font size (the main name)
                     let maxIndex = 0;
                     let maxSize = s.lines[0].size;
                     for (let i = 1; i < s.lines.length; i++) {
@@ -90,52 +75,43 @@ const Generator2: React.FC<SceneProps> = ({
                             maxIndex = i;
                         }
                     }
-
-                    // The largest text is ALWAYS the center name line
                     nameLine = s.lines[maxIndex];
-
-                    // Determine what to do with the other lines
-                    // Anything before maxIndex goes to the top
-                    // Anything after maxIndex goes to the bottom
-                    if (maxIndex > 0) {
-                        topLine = s.lines[0];
-                    }
-                    if (maxIndex < s.lines.length - 1) {
+                    if (maxIndex > 0) topLine = s.lines[0];
+                    if (maxIndex < s.lines.length - 1)
                         bottomLine = s.lines[maxIndex + 1];
-                    }
                 }
 
+                // Helper: Adds 0.1mm overlap so the boolean math can fuse surfaces securely
                 const createTextRaw = (line: any) => {
                     if (!line?.text.trim()) return null;
-                    const g = createTextGeometryWithSpacing(
+                    let g = createTextGeometryWithSpacing(
                         line.text,
                         fonts[line.font],
                         line.size,
-                        line.depth || 0.6,
+                        (line.depth || 0.6) + 0.1, // Extrude 0.1mm deeper for perfect fusion
                         line.letterSpacing || 0,
                     );
+
+                    g = BufferGeometryUtils.mergeVertices(g);
                     g.computeBoundingBox();
+
                     const tw = g.boundingBox!.max.x - g.boundingBox!.min.x;
-                    const th = g.boundingBox!.max.y - g.boundingBox!.min.y;
                     const cx =
                         (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2;
                     const cy =
                         (g.boundingBox!.min.y + g.boundingBox!.max.y) / 2;
-                    return { g, tw, th, cx, cy, line };
+                    return { g, tw, cx, cy, line };
                 };
 
                 const rawTop = createTextRaw(topLine);
                 const rawCenter = createTextRaw(nameLine);
                 const rawBottom = createTextRaw(bottomLine);
 
-                // --- 2. Calculate Dimensions & Margins ---
                 let bw = s.shape.width || 180;
                 let bh = s.shape.height || 88.8;
                 let topBandH = 28;
                 let botBandH = 22;
                 let sideMargin = 8;
-                let innerH = 30;
-
                 const pad = s.shape.padding || 8;
 
                 if (s.shape.autoSize) {
@@ -148,46 +124,36 @@ const Generator2: React.FC<SceneProps> = ({
                     let calcInner = rawCenter ? centerSize + pad * 2 : 30;
 
                     let calcBh = calcTopBand + calcBotBand + calcInner;
-
                     const tabHeight = s.laceHole.enabled ? 8.75 : 0;
                     bh = Math.max(s.shape.height - tabHeight, calcBh);
 
-                    // Keep border bands strictly sized to the font + padding.
-                    // Give any manually requested extra height to the inner white hole!
                     topBandH = calcTopBand;
                     botBandH = calcBotBand;
-                    innerH = calcInner + (bh > calcBh ? bh - calcBh : 0);
 
-                    const wTop = rawTop ? rawTop.tw : 0;
-                    const wCenter = rawCenter ? rawCenter.tw : 0;
-                    const wBot = rawBottom ? rawBottom.tw : 0;
-                    const maxTw = Math.max(wTop, wCenter, wBot);
-
+                    const maxTw = Math.max(
+                        rawTop ? rawTop.tw : 0,
+                        rawCenter ? rawCenter.tw : 0,
+                        rawBottom ? rawBottom.tw : 0,
+                    );
                     sideMargin = Math.max(8, pad);
-                    let calcBw = maxTw + sideMargin * 2;
-
-                    bw = Math.max(s.shape.width, calcBw);
-                    // Do not increase sideMargin if bw > calcBw.
-                    // Let the side borders stay strict to `pad`, allowing the white hole to absorb the extra width!
+                    bw = Math.max(s.shape.width, maxTw + sideMargin * 2);
                 } else {
                     const tabHeight = s.laceHole.enabled ? 8.75 : 0;
                     bh = Math.max(10, s.shape.height - tabHeight);
                     bw = Math.max(20, s.shape.width);
-
                     const heightRatio = bh / 80;
                     const widthRatio = bw / 180;
                     topBandH = 28 * heightRatio;
                     botBandH = 22 * heightRatio;
                     sideMargin = 8 * widthRatio;
-                    innerH = Math.max(1, bh - topBandH - botBandH);
                 }
 
                 const cornerR = s.shape.cornerRadius || 25;
                 const baseThick = s.shape.baseThickness || 3.0;
                 const frameThick = s.shape.topBorder || 1.6;
 
-                // --- 3. Base Plate & Frame ---
-                const rawBase = new THREE.ExtrudeGeometry(
+                // 1. Baseplate (Z from 0 up to baseThick)
+                let rawBase = new THREE.ExtrudeGeometry(
                     createDynamicBaseShape(bw, bh, cornerR),
                     {
                         depth: baseThick,
@@ -195,11 +161,12 @@ const Generator2: React.FC<SceneProps> = ({
                         curveSegments: 16,
                     },
                 );
-                rawBase.translate(0, 0, -baseThick); // Top surface sits at Z=0
+                rawBase.translate(0, 0, 0);
+                rawBase = BufferGeometryUtils.mergeVertices(rawBase);
                 rawBase.computeVertexNormals();
-                setBaseGeo(rawBase);
 
-                const rawFrame = new THREE.ExtrudeGeometry(
+                // 2. Frame (Starts 0.1mm inside baseplate to fuse perfectly)
+                let rawFrame = new THREE.ExtrudeGeometry(
                     createDynamicFrameShape(
                         bw,
                         bh,
@@ -210,25 +177,25 @@ const Generator2: React.FC<SceneProps> = ({
                         s.shape.innerRadius ?? 20,
                     ),
                     {
-                        depth: frameThick,
+                        depth: frameThick + 0.1,
                         bevelEnabled: false,
                         curveSegments: 16,
                     },
                 );
-                rawFrame.translate(0, 0, 0.01); // 0.01mm micro-gap to prevent slicer layer sharing
+                rawFrame.translate(0, 0, baseThick - 0.1);
+                rawFrame = BufferGeometryUtils.mergeVertices(rawFrame);
                 rawFrame.computeVertexNormals();
-                setFrameGeo(rawFrame);
 
-                // --- 4. Position Text Geometries ---
                 const topTextY = bh / 2 - topBandH / 2;
                 const botTextY = -bh / 2 + botBandH / 2;
-                const centerTextY = (botBandH - topBandH) / 2; // Matches holeOffsetY exactly!
+                const centerTextY = (botBandH - topBandH) / 2;
 
+                // 3. Texts (Sink 0.1mm into their respective surfaces to fuse perfectly)
                 if (rawTop) {
                     rawTop.g.translate(
                         -rawTop.cx,
                         topTextY - rawTop.line.size * 0.35,
-                        frameThick + 0.02,
+                        baseThick + frameThick - 0.1,
                     );
                     rawTop.g.computeVertexNormals();
                 }
@@ -236,7 +203,7 @@ const Generator2: React.FC<SceneProps> = ({
                     rawCenter.g.translate(
                         -rawCenter.cx,
                         centerTextY - rawCenter.cy,
-                        0.01,
+                        baseThick - 0.1,
                     );
                     rawCenter.g.computeVertexNormals();
                 }
@@ -244,35 +211,77 @@ const Generator2: React.FC<SceneProps> = ({
                     rawBottom.g.translate(
                         -rawBottom.cx,
                         botTextY - rawBottom.line.size * 0.35,
-                        frameThick + 0.02,
+                        baseThick + frameThick - 0.1,
                     );
                     rawBottom.g.computeVertexNormals();
                 }
 
+                // --- 4. ACTUAL BOOLEAN FUSION ---
+                // This is the step that was missing. It deletes all internal hidden faces.
+                const ev = new Evaluator();
+                ev.useGroups = true; // Keeps the material colors visible in your web app
+
+                const matBase = new THREE.MeshStandardMaterial({
+                    color: ds.baseColor || "#ffffff",
+                    roughness: 0.3,
+                });
+                const matFrame = new THREE.MeshStandardMaterial({
+                    color: ds.borderColor || "#4a3525",
+                    roughness: 0.3,
+                });
+
+                // Start by brushing the Baseplate
+                let finalBrush = new Brush(rawBase, matBase);
+                finalBrush.updateMatrixWorld();
+
+                // Fuse the Frame into the Baseplate
+                const frameBrush = new Brush(rawFrame, matFrame);
+                frameBrush.updateMatrixWorld();
+                finalBrush = ev.evaluate(finalBrush, frameBrush, ADDITION);
+
+                // Fuse the Center Text
+                if (rawCenter) {
+                    const matCenter = new THREE.MeshStandardMaterial({
+                        color: nameLine?.color || ds.borderColor,
+                        roughness: 0.25,
+                        metalness: 0.05,
+                    });
+                    const centerBrush = new Brush(rawCenter.g, matCenter);
+                    centerBrush.updateMatrixWorld();
+                    finalBrush = ev.evaluate(finalBrush, centerBrush, ADDITION);
+                }
+
+                // Fuse the Top Text
+                if (rawTop) {
+                    const matTop = new THREE.MeshStandardMaterial({
+                        color: topLine?.color || ds.baseColor,
+                        roughness: 0.25,
+                        metalness: 0.05,
+                    });
+                    const topBrush = new Brush(rawTop.g, matTop);
+                    topBrush.updateMatrixWorld();
+                    finalBrush = ev.evaluate(finalBrush, topBrush, ADDITION);
+                }
+
+                // Fuse the Bottom Text
+                if (rawBottom) {
+                    const matBot = new THREE.MeshStandardMaterial({
+                        color: bottomLine?.color || ds.baseColor,
+                        roughness: 0.25,
+                        metalness: 0.05,
+                    });
+                    const botBrush = new Brush(rawBottom.g, matBot);
+                    botBrush.updateMatrixWorld();
+                    finalBrush = ev.evaluate(finalBrush, botBrush, ADDITION);
+                }
+
                 if (!active) return;
 
-                // Finalize
-                setTopText(
-                    rawTop
-                        ? { g: rawTop.g, color: topLine?.color || ds.baseColor }
-                        : null,
-                );
-                setCenterText(
-                    rawCenter
-                        ? {
-                              g: rawCenter.g,
-                              color: nameLine?.color || ds.borderColor,
-                          }
-                        : null,
-                );
-                setBottomText(
-                    rawBottom
-                        ? {
-                              g: rawBottom.g,
-                              color: bottomLine?.color || ds.baseColor,
-                          }
-                        : null,
-                );
+                // Push ONE single, fused mesh to the React state
+                setMergedMesh({
+                    geometry: finalBrush.geometry,
+                    material: finalBrush.material,
+                });
 
                 const maxD = Math.max(...s.lines.map((l) => l.depth || 0.6));
                 const tabHeight = s.laceHole.enabled ? 8.75 : 0;
@@ -282,7 +291,7 @@ const Generator2: React.FC<SceneProps> = ({
                     z: baseThick + frameThick + maxD,
                 });
             } catch (e) {
-                console.error("Design2 Error", e);
+                console.error("Design2 CSG Error:", e);
             }
         };
 
@@ -295,57 +304,13 @@ const Generator2: React.FC<SceneProps> = ({
     return (
         <Center disableZ>
             <group ref={meshRef}>
-                {/* Layer 1: White Base Plate */}
-                {baseGeo && (
-                    <mesh geometry={baseGeo} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={ds.baseColor || "#ffffff"}
-                            roughness={0.3}
-                        />
-                    </mesh>
-                )}
-
-                {/* Layer 2: Brown Frame */}
-                {frameGeo && (
-                    <mesh geometry={frameGeo} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={ds.borderColor || "#4a3525"}
-                            roughness={0.3}
-                        />
-                    </mesh>
-                )}
-
-                {/* Center Text (Inside cutout, sits on white base) */}
-                {centerText && (
-                    <mesh geometry={centerText.g} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={centerText.color}
-                            roughness={0.25}
-                            metalness={0.05}
-                        />
-                    </mesh>
-                )}
-
-                {/* Top Text (Sits elevated on brown frame) */}
-                {topText && (
-                    <mesh geometry={topText.g} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={topText.color}
-                            roughness={0.25}
-                            metalness={0.05}
-                        />
-                    </mesh>
-                )}
-
-                {/* Bottom Text (Sits elevated on brown frame) */}
-                {bottomText && (
-                    <mesh geometry={bottomText.g} castShadow receiveShadow>
-                        <meshStandardMaterial
-                            color={bottomText.color}
-                            roughness={0.25}
-                            metalness={0.05}
-                        />
-                    </mesh>
+                {mergedMesh && (
+                    <mesh
+                        geometry={mergedMesh.geometry}
+                        material={mergedMesh.material}
+                        castShadow
+                        receiveShadow
+                    />
                 )}
             </group>
         </Center>
@@ -353,9 +318,6 @@ const Generator2: React.FC<SceneProps> = ({
 };
 
 const Scene2: React.FC<SceneProps> = (props) => {
-    const baseThickness = props.state.shape.baseThickness || 3.0;
-    const floorZ = -baseThickness;
-
     return (
         <Canvas shadows camera={{ position: [0, -120, 90], fov: 40 }}>
             <color attach="background" args={["#f8f9fa"]} />
@@ -370,7 +332,7 @@ const Scene2: React.FC<SceneProps> = (props) => {
 
             <Generator2 {...props} />
 
-            <mesh position={[0, 0, floorZ - 0.05]} receiveShadow>
+            <mesh position={[0, 0, -0.05]} receiveShadow>
                 <planeGeometry args={[500, 500]} />
                 <shadowMaterial transparent opacity={0.15} />
             </mesh>
@@ -383,10 +345,9 @@ const Scene2: React.FC<SceneProps> = (props) => {
                 cellColor="#cbd5e1"
                 sectionSize={10}
                 cellSize={2}
-                position={[0, 0, floorZ]}
+                position={[0, 0, 0]}
                 rotation={[Math.PI / 2, 0, 0]}
             />
-
             <OrbitControls makeDefault minDistance={10} maxDistance={400} />
             <Environment preset="city" />
         </Canvas>

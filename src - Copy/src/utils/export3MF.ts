@@ -1,10 +1,7 @@
-import * as THREE from "three";
-import JSZip from "jszip";
+import * as THREE from 'three';
+import JSZip from 'jszip';
 
-export async function export3MF(
-    group: THREE.Group,
-    filename: string = "export.3mf",
-) {
+export async function export3MF(group: THREE.Group, filename: string = 'export.3mf') {
     const meshes: THREE.Mesh[] = [];
     group.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
@@ -19,13 +16,10 @@ export async function export3MF(
     meshes.forEach((mesh) => {
         let colorHex = "#FFFFFF";
         if (mesh.material) {
-            const material = Array.isArray(mesh.material)
-                ? mesh.material[0]
-                : mesh.material;
+            const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
             if ((material as any).color) {
                 // Get color in hex (e.g. #FFFFFF)
-                colorHex =
-                    "#" + (material as any).color.getHexString().toUpperCase();
+                colorHex = "#" + (material as any).color.getHexString().toUpperCase();
             }
         }
         // Force full opacity for the color group (3MF uses ARGB, e.g. #FFFFFFFF)
@@ -82,7 +76,7 @@ export async function export3MF(
         resourcesXml += objectXml;
 
         componentsXml += `      <component objectid="${nextObjectId}" transform="1 0 0 0 1 0 0 0 1 0 0 0" />\n`;
-
+        
         nextObjectId++;
     });
 
@@ -109,20 +103,20 @@ ${buildXml}</model>`;
 </Types>`;
 
     const zip = new JSZip();
-    zip.file("[Content_Types].xml", contentTypesXml);
-    zip.folder("_rels")?.file(".rels", relsXml);
-    zip.folder("3D")?.file("3dmodel.model", modelXml);
+    zip.file('[Content_Types].xml', contentTypesXml);
+    zip.folder('_rels')?.file('.rels', relsXml);
+    zip.folder('3D')?.file('3dmodel.model', modelXml);
 
-    const content = await zip.generateAsync({ type: "blob" });
+    const content = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(content);
-
-    const link = document.createElement("a");
-    link.style.display = "none";
+    
+    const link = document.createElement('a');
+    link.style.display = 'none';
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
-
+    
     setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
@@ -132,12 +126,9 @@ ${buildXml}</model>`;
 function getMeshColor(mesh: THREE.Mesh): string {
     let colorHex = "#FFFFFF";
     if (mesh.material) {
-        const material = Array.isArray(mesh.material)
-            ? mesh.material[0]
-            : mesh.material;
+        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         if ((material as any).color) {
-            colorHex =
-                "#" + (material as any).color.getHexString().toUpperCase();
+            colorHex = "#" + (material as any).color.getHexString().toUpperCase();
         }
     }
     return colorHex + "FF";

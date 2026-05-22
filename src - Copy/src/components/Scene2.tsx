@@ -17,10 +17,7 @@ interface SceneProps {
     onBoundsChange?: (bounds: { x: number; y: number; z: number }) => void;
 }
 
-import {
-    createDynamicBaseShape,
-    createDynamicFrameShape,
-} from "../utils/GeometryShapes";
+import { createDynamicBaseShape, createDynamicFrameShape } from "../utils/GeometryShapes";
 
 const Generator2: React.FC<SceneProps> = ({
     state,
@@ -29,18 +26,9 @@ const Generator2: React.FC<SceneProps> = ({
 }) => {
     const [baseGeo, setBaseGeo] = useState<THREE.BufferGeometry | null>(null);
     const [frameGeo, setFrameGeo] = useState<THREE.BufferGeometry | null>(null);
-    const [topText, setTopText] = useState<{
-        g: THREE.BufferGeometry;
-        color: string;
-    } | null>(null);
-    const [centerText, setCenterText] = useState<{
-        g: THREE.BufferGeometry;
-        color: string;
-    } | null>(null);
-    const [bottomText, setBottomText] = useState<{
-        g: THREE.BufferGeometry;
-        color: string;
-    } | null>(null);
+    const [topText, setTopText] = useState<{g: THREE.BufferGeometry, color: string} | null>(null);
+    const [centerText, setCenterText] = useState<{g: THREE.BufferGeometry, color: string} | null>(null);
+    const [bottomText, setBottomText] = useState<{g: THREE.BufferGeometry, color: string} | null>(null);
 
     const ds = useDebounce(state, 200);
 
@@ -112,15 +100,13 @@ const Generator2: React.FC<SceneProps> = ({
                         fonts[line.font],
                         line.size,
                         line.depth || 0.6,
-                        line.letterSpacing || 0,
+                        line.letterSpacing || 0
                     );
                     g.computeBoundingBox();
                     const tw = g.boundingBox!.max.x - g.boundingBox!.min.x;
                     const th = g.boundingBox!.max.y - g.boundingBox!.min.y;
-                    const cx =
-                        (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2;
-                    const cy =
-                        (g.boundingBox!.min.y + g.boundingBox!.max.y) / 2;
+                    const cx = (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2;
+                    const cy = (g.boundingBox!.min.y + g.boundingBox!.max.y) / 2;
                     return { g, tw, th, cx, cy, line };
                 };
 
@@ -146,34 +132,34 @@ const Generator2: React.FC<SceneProps> = ({
                     let calcTopBand = rawTop ? topSize + pad * 2 : pad;
                     let calcBotBand = rawBottom ? botSize + pad * 2 : pad;
                     let calcInner = rawCenter ? centerSize + pad * 2 : 30;
-
+                    
                     let calcBh = calcTopBand + calcBotBand + calcInner;
-
+                    
                     const tabHeight = s.laceHole.enabled ? 8.75 : 0;
                     bh = Math.max(s.shape.height - tabHeight, calcBh);
-
+                    
                     // Keep border bands strictly sized to the font + padding.
                     // Give any manually requested extra height to the inner white hole!
                     topBandH = calcTopBand;
                     botBandH = calcBotBand;
                     innerH = calcInner + (bh > calcBh ? bh - calcBh : 0);
-
+                    
                     const wTop = rawTop ? rawTop.tw : 0;
                     const wCenter = rawCenter ? rawCenter.tw : 0;
                     const wBot = rawBottom ? rawBottom.tw : 0;
                     const maxTw = Math.max(wTop, wCenter, wBot);
-
+                    
                     sideMargin = Math.max(8, pad);
                     let calcBw = maxTw + sideMargin * 2;
-
+                    
                     bw = Math.max(s.shape.width, calcBw);
-                    // Do not increase sideMargin if bw > calcBw.
+                    // Do not increase sideMargin if bw > calcBw. 
                     // Let the side borders stay strict to `pad`, allowing the white hole to absorb the extra width!
                 } else {
                     const tabHeight = s.laceHole.enabled ? 8.75 : 0;
                     bh = Math.max(10, s.shape.height - tabHeight);
                     bw = Math.max(20, s.shape.width);
-
+                    
                     const heightRatio = bh / 80;
                     const widthRatio = bw / 180;
                     topBandH = 28 * heightRatio;
@@ -187,33 +173,22 @@ const Generator2: React.FC<SceneProps> = ({
                 const frameThick = s.shape.topBorder || 1.6;
 
                 // --- 3. Base Plate & Frame ---
-                const rawBase = new THREE.ExtrudeGeometry(
-                    createDynamicBaseShape(bw, bh, cornerR),
-                    {
-                        depth: baseThick,
-                        bevelEnabled: false,
-                        curveSegments: 16,
-                    },
-                );
+                const rawBase = new THREE.ExtrudeGeometry(createDynamicBaseShape(bw, bh, cornerR), {
+                    depth: baseThick,
+                    bevelEnabled: false,
+                    curveSegments: 16,
+                });
                 rawBase.translate(0, 0, -baseThick); // Top surface sits at Z=0
                 rawBase.computeVertexNormals();
                 setBaseGeo(rawBase);
 
                 const rawFrame = new THREE.ExtrudeGeometry(
-                    createDynamicFrameShape(
-                        bw,
-                        bh,
-                        cornerR,
-                        sideMargin,
-                        topBandH,
-                        botBandH,
-                        s.shape.innerRadius ?? 20,
-                    ),
+                    createDynamicFrameShape(bw, bh, cornerR, sideMargin, topBandH, botBandH, s.shape.innerRadius ?? 20),
                     {
                         depth: frameThick,
                         bevelEnabled: false,
                         curveSegments: 16,
-                    },
+                    }
                 );
                 rawFrame.translate(0, 0, 0.01); // 0.01mm micro-gap to prevent slicer layer sharing
                 rawFrame.computeVertexNormals();
@@ -225,54 +200,24 @@ const Generator2: React.FC<SceneProps> = ({
                 const centerTextY = (botBandH - topBandH) / 2; // Matches holeOffsetY exactly!
 
                 if (rawTop) {
-                    rawTop.g.translate(
-                        -rawTop.cx,
-                        topTextY - rawTop.line.size * 0.35,
-                        frameThick + 0.02,
-                    );
+                    rawTop.g.translate(-rawTop.cx, topTextY - (rawTop.line.size * 0.35), frameThick + 0.02);
                     rawTop.g.computeVertexNormals();
                 }
                 if (rawCenter) {
-                    rawCenter.g.translate(
-                        -rawCenter.cx,
-                        centerTextY - rawCenter.cy,
-                        0.01,
-                    );
+                    rawCenter.g.translate(-rawCenter.cx, centerTextY - rawCenter.cy, 0.01);
                     rawCenter.g.computeVertexNormals();
                 }
                 if (rawBottom) {
-                    rawBottom.g.translate(
-                        -rawBottom.cx,
-                        botTextY - rawBottom.line.size * 0.35,
-                        frameThick + 0.02,
-                    );
+                    rawBottom.g.translate(-rawBottom.cx, botTextY - (rawBottom.line.size * 0.35), frameThick + 0.02);
                     rawBottom.g.computeVertexNormals();
                 }
 
                 if (!active) return;
 
                 // Finalize
-                setTopText(
-                    rawTop
-                        ? { g: rawTop.g, color: topLine?.color || ds.baseColor }
-                        : null,
-                );
-                setCenterText(
-                    rawCenter
-                        ? {
-                              g: rawCenter.g,
-                              color: nameLine?.color || ds.borderColor,
-                          }
-                        : null,
-                );
-                setBottomText(
-                    rawBottom
-                        ? {
-                              g: rawBottom.g,
-                              color: bottomLine?.color || ds.baseColor,
-                          }
-                        : null,
-                );
+                setTopText(rawTop ? { g: rawTop.g, color: topLine?.color || ds.baseColor } : null);
+                setCenterText(rawCenter ? { g: rawCenter.g, color: nameLine?.color || ds.borderColor } : null);
+                setBottomText(rawBottom ? { g: rawBottom.g, color: bottomLine?.color || ds.baseColor } : null);
 
                 const maxD = Math.max(...s.lines.map((l) => l.depth || 0.6));
                 const tabHeight = s.laceHole.enabled ? 8.75 : 0;

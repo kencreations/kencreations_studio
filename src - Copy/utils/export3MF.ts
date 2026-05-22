@@ -14,56 +14,42 @@ export async function export3MF(
 
     if (meshes.length === 0) return;
 
-    // Collect distinct colors
     const uniqueColors: string[] = [];
     meshes.forEach((mesh) => {
-        let colorHex = "#FFFFFF";
-        if (mesh.material) {
-            const material = Array.isArray(mesh.material)
-                ? mesh.material[0]
-                : mesh.material;
-            if ((material as any).color) {
-                // Get color in hex (e.g. #FFFFFF)
-                colorHex =
-                    "#" + (material as any).color.getHexString().toUpperCase();
-            }
-        }
-        // Force full opacity for the color group (3MF uses ARGB, e.g. #FFFFFFFF)
-        // Actually, the format is #RRGGBBAA. Let's use #RRGGBBFF
-        const colorWithAlpha = colorHex + "FF";
-        if (!uniqueColors.includes(colorWithAlpha)) {
-            uniqueColors.push(colorWithAlpha);
+        const colorHex = getMeshColor(mesh);
+        if (!uniqueColors.includes(colorHex)) {
+            uniqueColors.push(colorHex);
         }
     });
 
-    let resourcesXml = `    <m:colorgroup id="1">\n`;
-    uniqueColors.forEach((color) => {
-        resourcesXml += `      <m:color color="${color}" />\n`;
+    let resourcesXml = `    <basematerials id="1">\n`;
+    uniqueColors.forEach((color, index) => {
+        resourcesXml += `      <base name="Filament Color ${index + 1}" displaycolor="${color}" />\n`;
     });
-    resourcesXml += `    </m:colorgroup>\n`;
+    resourcesXml += `    </basematerials>\n`;
 
-    let nextObjectId = 2; // ID 1 is for colorgroup
-    let componentsXml = `  <object id="9999" type="model">\n    <components>\n`;
+    let nextObjectId = 2;
+    let componentsXml = `  <object id="9999" type="model" name="KenCreations_Studio_Model">\n    <components>\n`;
 
     meshes.forEach((mesh) => {
         const geometry = mesh.geometry;
         if (!geometry || !geometry.attributes.position) return;
 
-        // Apply world transform if needed, or local transform relative to group
         const positionAttr = geometry.attributes.position;
         const indexAttr = geometry.index;
-        const posArray = positionAttr.array;
-
         const positionVector = new THREE.Vector3();
 
-        let objectXml = `    <object id="${nextObjectId}" type="model" pid="1" pindex="${uniqueColors.indexOf(getMeshColor(mesh))}">\n      <mesh>\n        <vertices>\n`;
+        const pindex = uniqueColors.indexOf(getMeshColor(mesh));
+        const meshName = mesh.name || `Part_${nextObjectId}`;
+
+        let objectXml = `    <object id="${nextObjectId}" type="model" name="${meshName}" pid="1" pindex="${pindex}">\n      <mesh>\n        <vertices>\n`;
 
         for (let i = 0; i < positionAttr.count; i++) {
             positionVector.fromBufferAttribute(positionAttr, i);
             positionVector.applyMatrix4(mesh.matrixWorld);
-            // 3MF uses Z up, but three.js often does too in our specific scene setup.
-            // Our scene uses Y up for the camera but the plate is drawn flat on XY plane and extruded along Z.
-            objectXml += `          <vertex x="${positionVector.x.toFixed(5)}" y="${positionVector.y.toFixed(5)}" z="${positionVector.z.toFixed(5)}"/>\n`;
+
+            // Strictly rounding to 4 decimal places prevents micro-layer bleeding
+            objectXml += `          <vertex x="${positionVector.x.toFixed(4)}" y="${positionVector.y.toFixed(4)}" z="${positionVector.z.toFixed(4)}"/>\n`;
         }
         objectXml += `        </vertices>\n        <triangles>\n`;
 
@@ -82,7 +68,6 @@ export async function export3MF(
         resourcesXml += objectXml;
 
         componentsXml += `      <component objectid="${nextObjectId}" transform="1 0 0 0 1 0 0 0 1 0 0 0" />\n`;
-
         nextObjectId++;
     });
 
@@ -92,7 +77,7 @@ export async function export3MF(
     let buildXml = `  <build>\n    <item objectid="9999" transform="1 0 0 0 1 0 0 0 1 0 0 0" />\n  </build>\n`;
 
     const modelXml = `<?xml version="1.0" encoding="utf-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
   <resources>
 ${resourcesXml}  </resources>
 ${buildXml}</model>`;
