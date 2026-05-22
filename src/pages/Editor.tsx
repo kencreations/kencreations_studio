@@ -35,7 +35,13 @@ const Editor: React.FC = () => {
         textColor: "#000000",
         borderColor: "#000000",
         baseColor: "#FFFFFF",
-        laceHole: { enabled: true, width: 15, height: 2, topMargin: 3 },
+        laceHole: {
+            enabled: true,
+            width: 15,
+            height: 2,
+            topMargin: 3,
+            type: "default",
+        },
         shape: {
             autoSize: true,
             padding: 10,
@@ -46,6 +52,7 @@ const Editor: React.FC = () => {
             wavelength: 0,
             baseThickness: 2.0,
             topBorder: 1.0,
+            innerRadius: 20,
         },
     };
 
@@ -77,7 +84,13 @@ const Editor: React.FC = () => {
         textColor: "#6F5034",
         borderColor: "#6F5034",
         baseColor: "#F7E6DE",
-        laceHole: { enabled: true, width: 11.0, height: 4.5, topMargin: 2.0 },
+        laceHole: {
+            enabled: true,
+            width: 11.0,
+            height: 4.5,
+            topMargin: 2.0,
+            type: "default",
+        },
         shape: {
             autoSize: true,
             padding: 4.0,
@@ -104,9 +117,12 @@ const Editor: React.FC = () => {
     };
 
     const getDownloadFilename = (ext: string) => {
-        const nameLine = state.lines.length >= 2 ? state.lines[1].text.trim() || 'nametag' : 'nametag';
-        const safeName = nameLine.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const prefix = isDesign2 ? 'idnametag_v2' : 'idnametag';
+        const nameLine =
+            state.lines.length >= 2
+                ? state.lines[1].text.trim() || "nametag"
+                : "nametag";
+        const safeName = nameLine.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const prefix = isDesign2 ? "idnametag_v2" : "idnametag";
         return `${prefix}_${safeName}.${ext}`;
     };
 
@@ -135,36 +151,13 @@ const Editor: React.FC = () => {
     return (
         <div className="editor-layout">
             {/* Floating Top Right Header/Navigation */}
-            <div
-                style={{
-                    position: "absolute",
-                    top: "24px",
-                    right: "24px",
-                    zIndex: 10,
-                    display: "flex",
-                    gap: "12px",
-                }}>
-                <a
-                    href="#"
-                    className="btn-pill"
-                    style={{ padding: "8px 16px", fontSize: "0.85rem" }}>
-                    Sign in for 50 free downloads
-                </a>
-                <a
-                    href="#"
-                    className="btn-pill"
-                    style={{ padding: "8px 16px", fontSize: "0.85rem" }}>
-                    View pricing
-                </a>
-                <a
-                    href="#"
-                    className="btn-pill"
-                    style={{ padding: "8px 16px", fontSize: "0.85rem" }}>
-                    Sign In
-                </a>
-            </div>
 
-            <Sidebar state={state} updateState={updateState} bounds={bounds} isDesign2={isDesign2} />
+            <Sidebar
+                state={state}
+                updateState={updateState}
+                bounds={bounds}
+                isDesign2={isDesign2}
+            />
 
             <main className="canvas-container">
                 {/* HUD Dimensions */}
@@ -174,7 +167,8 @@ const Editor: React.FC = () => {
                         top: "24px",
                         left: "408px",
                         zIndex: 10,
-                    }}>
+                    }}
+                >
                     <div className="hud-panel">
                         <div className="hud-title">Size (mm)</div>
                         <div className="hud-grid">
@@ -210,7 +204,8 @@ const Editor: React.FC = () => {
                         display: "flex",
                         gap: "12px",
                         alignItems: "center",
-                    }}>
+                    }}
+                >
                     <button className="btn-pill btn-pill-icon">
                         <Camera size={20} />
                     </button>

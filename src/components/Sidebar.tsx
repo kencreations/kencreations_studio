@@ -329,6 +329,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         });
     };
 
+    const updateShape = (updates: Partial<AppState["shape"]>) => {
+        updateState({ shape: { ...state.shape, ...updates } });
+    };
+
+    const updateLaceHole = (updates: Partial<AppState["laceHole"]>) => {
+        updateState({ laceHole: { ...state.laceHole, ...updates } });
+    };
+
     return (
         <aside className="sidebar">
             <div className="sidebar-header">
@@ -1189,17 +1197,63 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                             <div className="control-item">
                                 <label>Type</label>
-                                <select
-                                    value={state.laceHole.type || "default"}
-                                    onChange={(e) =>
-                                        updateLaceHole({
-                                            type: e.target.value as any,
-                                        })
-                                    }
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        gap: "10px",
+                                        alignItems: "center",
+                                        minHeight: "28px",
+                                    }}
                                 >
-                                    <option value="default">Default</option>
-                                    <option value="loop">Loop</option>
-                                </select>
+                                    <label
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            margin: 0,
+                                            fontWeight: 500,
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="lace-hole-type"
+                                            checked={
+                                                (state.laceHole.type ||
+                                                    "default") === "default"
+                                            }
+                                            onChange={() =>
+                                                updateLaceHole({
+                                                    type: "default",
+                                                })
+                                            }
+                                        />
+                                        Slot
+                                    </label>
+                                    <label
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            margin: 0,
+                                            fontWeight: 500,
+                                        }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="lace-hole-type"
+                                            checked={
+                                                (state.laceHole.type ||
+                                                    "default") === "loop"
+                                            }
+                                            onChange={() =>
+                                                updateLaceHole({
+                                                    type: "loop",
+                                                })
+                                            }
+                                        />
+                                        Loop Tab
+                                    </label>
+                                </div>
                             </div>
                             <div
                                 className="control-item"

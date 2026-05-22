@@ -3,8 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment, Grid, Center } from "@react-three/drei";
 import * as THREE from "three";
 import { FontLoader, Font } from "three/examples/jsm/loaders/FontLoader.js";
-import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
-import { Evaluator, Brush, SUBTRACTION } from "three-bvh-csg";
+import { Evaluator, Brush, SUBTRACTION, ADDITION } from "three-bvh-csg";
 import { createTextGeometryWithSpacing } from "../utils/textEngine";
 import type { AppState } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
@@ -162,7 +161,6 @@ function createBaseShape(
     return shape;
 }
 
-import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { TTFLoader } from "three/examples/jsm/loaders/TTFLoader.js";
 
 const Generator: React.FC<SceneProps> = ({
@@ -210,18 +208,25 @@ const Generator: React.FC<SceneProps> = ({
 
                 if (!active) return;
                 const evaluator = new Evaluator();
+                const laceHoleType = s.laceHole.type || "default";
+                const hasDefaultSlot =
+                    s.laceHole.enabled && laceHoleType === "default";
+                const hasLoopTab =
+                    s.laceHole.enabled && laceHoleType === "loop";
 
                 // 1. Text Geometries (Merged securely via BufferGeometryUtils)
                 const textGeometries: THREE.BufferGeometry[] = [];
-                const totalTextHeight =
-                    s.lines.reduce((sum, l) => sum + l.size, 0) +
-                    Math.max(0, s.lines.length - 1) * s.lineSpacing;
                 let maxTextWidth = 0;
 
                 const lineGeometries: {
                     line: any;
                     geo: THREE.BufferGeometry;
                     tw: number;
+                    minX: number;
+                    maxX: number;
+                    minY: number;
+                    maxY: number;
+                    th: number;
                 }[] = [];
 
                 for (const line of s.lines) {
@@ -234,61 +239,61 @@ const Generator: React.FC<SceneProps> = ({
                         line.letterSpacing || 0,
                     );
                     geo.computeBoundingBox();
-                    const tw = geo.boundingBox!.max.x - geo.boundingBox!.min.x;
+                    const bounds = geo.boundingBox!;
+                    const tw = bounds.max.x - bounds.min.x;
+                    const th = bounds.max.y - bounds.min.y;
                     maxTextWidth = Math.max(maxTextWidth, tw);
-                    lineGeometries.push({ line, geo, tw });
+                    lineGeometries.push({
+                        line,
+                        geo,
+                        tw,
+                        minX: bounds.min.x,
+                        maxX: bounds.max.x,
+                        minY: bounds.min.y,
+                        maxY: bounds.max.y,
+                        th,
+                    });
                 }
+
+                const totalTextHeight =
+                    lineGeometries.reduce((sum, item) => sum + item.th, 0) +
+                    Math.max(0, lineGeometries.length - 1) * s.lineSpacing;
 
                 let bw = s.shape.width;
                 let bh = s.shape.height;
-                let textOffsetY = 0;
+                const holeSpace = s.laceHole.topMargin + s.laceHole.height;
 
                 if (s.shape.autoSize) {
                     bw = maxTextWidth + s.shape.padding * 2;
                     bh = totalTextHeight + s.shape.padding * 2;
 
-                    if (s.laceHole.enabled) {
-                        const holeSpace =
-                            s.laceHole.topMargin + s.laceHole.height;
+                    if (hasDefaultSlot) {
                         bh += holeSpace;
                         bw = Math.max(
                             bw,
                             s.laceHole.width + s.shape.padding * 2,
                         );
-                        textOffsetY = -holeSpace / 2; // Shift text down
                     }
-                } else {
-                    // Manual size: still shift text down to avoid intersecting lace hole visually
-                    if (s.laceHole.enabled) {
-                        const holeSpace =
-                            s.laceHole.topMargin + s.laceHole.height;
-                        textOffsetY = -holeSpace / 2;
+                    if (hasLoopTab) {
+                        bw = Math.max(
+                            bw,
+                            s.laceHole.width + s.shape.padding * 2 + 8,
+                        );
                     }
                 }
 
-                let textBlockYStart = bh / 2;
-                let textBlockHeight = bh;
+                const reservedTop = hasDefaultSlot ? holeSpace : 0;
+                const textAreaTop = bh / 2 - reservedTop;
+                const textAreaBottom = -bh / 2;
+                const textCenterY = (textAreaTop + textAreaBottom) / 2;
+                let currentTop = textCenterY + totalTextHeight / 2;
 
-                if (s.laceHole.enabled) {
-                    const holeSpace = s.laceHole.topMargin + s.laceHole.height;
-                    if (s.laceHole.type !== "loop") {
-                        textBlockYStart -= holeSpace;
-                    }
-                    textBlockHeight -= holeSpace;
-                }
-
-                // Calculate the starting Y position to center the whole text block
-                let currentY =
-                    textBlockYStart - (textBlockHeight - totalTextHeight) / 2;
-
-                for (const { line, geo, tw } of lineGeometries) {
-                    // The Y position for each line should be its baseline.
-                    // createTextGeometryWithSpacing positions the geometry relative to the baseline.
-                    // We need to align the top of the text block.
-                    const lineY = currentY - line.size;
-                    geo.translate(-tw / 2, lineY, s.shape.baseThickness / 2);
+                for (const { geo, minX, maxX, maxY, th } of lineGeometries) {
+                    const offsetX = -((minX + maxX) / 2);
+                    const offsetY = currentTop - maxY;
+                    geo.translate(offsetX, offsetY, s.shape.baseThickness / 2);
                     textGeometries.push(geo);
-                    currentY -= line.size + s.lineSpacing;
+                    currentTop -= th + s.lineSpacing;
                 }
 
                 // 2. Base Plate & Border
@@ -299,7 +304,7 @@ const Generator: React.FC<SceneProps> = ({
                     s.shape.cornerRadius,
                     s.shape.amplitude,
                     s.shape.wavelength,
-                    s.laceHole.enabled,
+                    hasDefaultSlot,
                 );
 
                 // Base Plate: Fully solid block from bottom to middle (Layer 1 Color)
@@ -324,7 +329,7 @@ const Generator: React.FC<SceneProps> = ({
                         innerR,
                         s.shape.amplitude,
                         s.shape.wavelength,
-                        s.laceHole.enabled,
+                        hasDefaultSlot,
                     );
 
                     const rawBorder = new THREE.ExtrudeGeometry(outerShape, {
@@ -354,12 +359,11 @@ const Generator: React.FC<SceneProps> = ({
                 }
 
                 let holeBrush: Brush | null = null;
-                if (s.laceHole.enabled && s.laceHole.type !== "loop") {
+                if (hasDefaultSlot) {
                     const hw = s.laceHole.width;
                     const hh = s.laceHole.height;
                     const hr = hh / 2;
                     const holeShape = createBaseShape(hw, hh, hr, 0, 0);
-                    // Huge depth to ensure clean cuts through all coplanar faces
                     const holeGeo = new THREE.ExtrudeGeometry(holeShape, {
                         depth: s.shape.baseThickness * 10,
                         curveSegments: 16,
@@ -377,75 +381,74 @@ const Generator: React.FC<SceneProps> = ({
                         holeBrush,
                         SUBTRACTION,
                     );
-                    if (borderBrush)
+                    if (borderBrush) {
                         borderBrush = evaluator.evaluate(
                             borderBrush,
                             holeBrush,
                             SUBTRACTION,
                         );
+                    }
                 }
 
-                if (s.laceHole.enabled && s.laceHole.type === "loop") {
-                    const loopW = s.laceHole.width;
-                    const loopH = s.laceHole.height;
-                    const loopR = Math.min(loopW / 2, loopH / 2);
+                if (hasLoopTab) {
+                    const tabW = Math.max(s.laceHole.width + 6, 12);
+                    const tabH = Math.max(s.laceHole.height + 3, 6);
+                    const tabR = Math.min(tabH * 0.35, tabW / 2 - 0.1);
 
-                    const loopShape = new THREE.Shape();
-                    loopShape.moveTo(-loopW / 2 + loopR, loopH);
-                    loopShape.lineTo(loopW / 2 - loopR, loopH);
-                    loopShape.absarc(
-                        loopW / 2 - loopR,
-                        loopH - loopR,
-                        loopR,
-                        Math.PI / 2,
-                        0,
-                        true,
-                    );
-                    loopShape.lineTo(loopW / 2, -loopH + loopR);
-                    loopShape.absarc(
-                        loopW / 2 - loopR,
-                        -loopH + loopR,
-                        loopR,
-                        0,
-                        -Math.PI / 2,
-                        true,
-                    );
-                    loopShape.lineTo(-loopW / 2 + loopR, -loopH);
-                    loopShape.absarc(
-                        -loopW / 2 + loopR,
-                        -loopH + loopR,
-                        loopR,
-                        -Math.PI / 2,
-                        -Math.PI,
-                        true,
-                    );
-                    loopShape.lineTo(-loopW / 2, loopH - loopR);
-                    loopShape.absarc(
-                        -loopW / 2 + loopR,
-                        loopH - loopR,
-                        loopR,
-                        -Math.PI,
-                        -Math.PI * 1.5,
-                        true,
-                    );
-
-                    const extrudeSettings = {
+                    const tabShape = createBaseShape(tabW, tabH, tabR, 0, 0);
+                    const tabGeo = new THREE.ExtrudeGeometry(tabShape, {
                         depth: s.shape.baseThickness,
                         bevelEnabled: false,
                         curveSegments: 16,
-                    };
-                    const loopGeo = new THREE.ExtrudeGeometry(
-                        loopShape,
-                        extrudeSettings,
+                    });
+                    // Keep the tab mostly fused to the top edge so it looks like the reference tag.
+                    const tabY = bh / 2 + tabH * 0.32;
+                    tabGeo.translate(0, tabY, -s.shape.baseThickness / 2);
+
+                    const tabBrush = new Brush(tabGeo);
+                    tabBrush.updateMatrixWorld();
+                    baseBrush = evaluator.evaluate(
+                        baseBrush,
+                        tabBrush,
+                        ADDITION,
                     );
 
-                    const loopY = bh / 2 - s.laceHole.topMargin - loopH;
-                    loopGeo.translate(0, loopY, -s.shape.baseThickness / 2);
+                    const slotW = Math.min(s.laceHole.width, tabW - 4);
+                    const slotH = Math.min(s.laceHole.height, tabH * 0.42);
+                    const slotR = slotH / 2;
+                    const slotShape = createBaseShape(
+                        slotW,
+                        slotH,
+                        slotR,
+                        0,
+                        0,
+                    );
+                    const slotGeo = new THREE.ExtrudeGeometry(slotShape, {
+                        depth: s.shape.baseThickness * 10,
+                        curveSegments: 16,
+                        bevelEnabled: false,
+                    });
+                    const slotY = tabY + tabH * 0.1;
+                    slotGeo.translate(0, slotY, -s.shape.baseThickness * 5);
 
-                    const loopBrush = new Brush(loopGeo);
-                    loopBrush.updateMatrixWorld();
+                    holeBrush = new Brush(slotGeo);
+                    holeBrush.updateMatrixWorld();
 
-                    baseBrush = evaluator.evaluate(baseBrush, loopBrush, 2); // UNION
+                    baseBrush = evaluator.evaluate(
+                        baseBrush,
+                        holeBrush,
+                        SUBTRACTION,
+                    );
+                    if (borderBrush) {
+                        borderBrush = evaluator.evaluate(
+                            borderBrush,
+                            holeBrush,
+                            SUBTRACTION,
+                        );
+                    }
+
+                    const tabTop = tabY + tabH / 2;
+                    bh = Math.max(bh, tabTop * 2);
                 }
 
                 if (active) {
