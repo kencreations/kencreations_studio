@@ -19,6 +19,8 @@ export interface AppState {
         width: number;
         height: number;
         topMargin: number;
+        offsetX?: number;
+        offsetY?: number;
         type: "default" | "loop";
     };
     shape: {
@@ -32,6 +34,7 @@ export interface AppState {
         baseThickness: number;
         topBorder: number;
         innerRadius: number;
+        borderWidth?: number;
     };
 }
 
@@ -48,4 +51,7 @@ export const FONTS = [
     { name: "Pacifico", url: "/fonts/Pacifico.ttf" },
     { name: "Lobster Two", url: "/fonts/LobsterTwo.ttf" },
     { name: "Roadside Sans", url: "/fonts/RoadsideSans.ttf" },
+    { name: "Arial", url: "/fonts/ARIAL.ttf" },
+    { name: "Arial Medium", url: "/fonts/ArialMdm.ttf" },
+    { name: "Arial Rounded Bold", url: "/fonts/ArialRnDBD.ttf" },
 ];

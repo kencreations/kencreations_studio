@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import JSZip from "jszip";
+import { Evaluator, Brush, ADDITION } from "three-bvh-csg";
 
 export async function export3MF(
     group: THREE.Group,
@@ -14,9 +15,38 @@ export async function export3MF(
 
     if (meshes.length === 0) return;
 
-    // Collect distinct colors
+    // 1. Separate base, border, and other (text) meshes
+    const baseMeshes = meshes.filter((m) => m.name === "base");
+    const borderMeshes = meshes.filter((m) => m.name === "border");
+    const textMeshes = meshes.filter((m) => m.name === "text" || (!m.name && m !== baseMeshes[0] && m !== borderMeshes[0]));
+
+    const processedMeshes: THREE.Mesh[] = [];
+
+    // Add all base and border meshes in world coordinates directly (perfect watertight meshes)
+    baseMeshes.forEach((m) => {
+        const cloned = new THREE.Mesh(m.geometry.clone(), m.material);
+        cloned.geometry.applyMatrix4(m.matrixWorld);
+        cloned.matrixWorld.identity();
+        processedMeshes.push(cloned);
+    });
+    borderMeshes.forEach((m) => {
+        const cloned = new THREE.Mesh(m.geometry.clone(), m.material);
+        cloned.geometry.applyMatrix4(m.matrixWorld);
+        cloned.matrixWorld.identity();
+        processedMeshes.push(cloned);
+    });
+
+    // Add all text meshes, transformed to world space with identity matrixWorld
+    textMeshes.forEach((m) => {
+        const cloned = new THREE.Mesh(m.geometry.clone(), m.material);
+        cloned.geometry.applyMatrix4(m.matrixWorld);
+        cloned.matrixWorld.identity();
+        processedMeshes.push(cloned);
+    });
+
+    // Collect distinct colors from processed meshes
     const uniqueColors: string[] = [];
-    meshes.forEach((mesh) => {
+    processedMeshes.forEach((mesh) => {
         let colorHex = "#FFFFFF";
         if (mesh.material) {
             const material = Array.isArray(mesh.material)
@@ -45,7 +75,7 @@ export async function export3MF(
     let nextObjectId = 2; // ID 1 is for colorgroup
     let componentsXml = `  <object id="9999" type="model">\n    <components>\n`;
 
-    meshes.forEach((mesh) => {
+    processedMeshes.forEach((mesh) => {
         const geometry = mesh.geometry;
         if (!geometry || !geometry.attributes.position) return;
 

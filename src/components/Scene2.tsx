@@ -15,6 +15,10 @@ interface SceneProps {
     state: AppState;
     meshRef: React.RefObject<THREE.Group | null>;
     onBoundsChange?: (bounds: { x: number; y: number; z: number }) => void;
+    activeLayer?: number;
+    totalLayers?: number;
+    bounds?: { x: number; y: number; z: number };
+    slicerPathProgress?: number;
 }
 
 import {
@@ -26,7 +30,246 @@ const Generator2: React.FC<SceneProps> = ({
     state,
     meshRef,
     onBoundsChange,
+    activeLayer,
+    totalLayers,
+    bounds,
+    slicerPathProgress,
 }) => {
+    const baseThickness = state.shape.baseThickness || 3.0;
+    const zHeight = bounds?.z || 6.0;
+    const floorZ = -baseThickness;
+    
+    const cutoffZ = React.useMemo(() => {
+        if (activeLayer === undefined || totalLayers === undefined) return 0;
+        return floorZ + (activeLayer / totalLayers) * zHeight;
+    }, [activeLayer, totalLayers, floorZ, zHeight]);
+
+    const clippingPlanes = React.useMemo(() => {
+        if (activeLayer === undefined || totalLayers === undefined || activeLayer >= totalLayers) {
+            return [];
+        }
+        return [new THREE.Plane(new THREE.Vector3(0, 0, -1), cutoffZ)];
+    }, [activeLayer, totalLayers, cutoffZ]);
+
+    const ghostClippingPlanes = React.useMemo(() => {
+        if (activeLayer === undefined || totalLayers === undefined || activeLayer >= totalLayers) {
+            return [];
+        }
+        return [new THREE.Plane(new THREE.Vector3(0, 0, 1), -cutoffZ)];
+    }, [activeLayer, totalLayers, cutoffZ]);
+
+    const striatedTexture = React.useMemo(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 1, 26);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(0, 26, 1, 6);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 100);
+        return texture;
+    }, []);
+
+    const toolpathTexture = React.useMemo(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, 512, 512);
+        
+        const progressVal = slicerPathProgress !== undefined ? slicerPathProgress / 100 : 1.0;
+        
+        // 1. Outer Red Perimeter (drawn between 0.0 and 0.15 progress)
+        if (progressVal > 0) {
+            const p1 = Math.min(1.0, progressVal / 0.15);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 10;
+            if (p1 >= 1.0) {
+                ctx.strokeRect(16, 16, 480, 480);
+            } else {
+                ctx.beginPath();
+                const totalLen = 480 * 4;
+                const drawLen = totalLen * p1;
+                ctx.moveTo(16, 16);
+                let currentLen = 0;
+                if (currentLen + 480 <= drawLen) {
+                    ctx.lineTo(496, 16);
+                    currentLen += 480;
+                } else {
+                    ctx.lineTo(16 + (drawLen - currentLen), 16);
+                    currentLen = drawLen;
+                }
+                if (currentLen < drawLen) {
+                    if (currentLen + 480 <= drawLen) {
+                        ctx.lineTo(496, 496);
+                        currentLen += 480;
+                    } else {
+                        ctx.lineTo(496, 16 + (drawLen - currentLen));
+                        currentLen = drawLen;
+                    }
+                }
+                if (currentLen < drawLen) {
+                    if (currentLen + 480 <= drawLen) {
+                        ctx.lineTo(16, 496);
+                        currentLen += 480;
+                    } else {
+                        ctx.lineTo(496 - (drawLen - currentLen), 496);
+                        currentLen = drawLen;
+                    }
+                }
+                if (currentLen < drawLen) {
+                    ctx.lineTo(16, 496 - (drawLen - currentLen));
+                }
+                ctx.stroke();
+            }
+        }
+        
+        // 2. Inner Green Perimeters (drawn between 0.15 and 0.30 progress)
+        if (progressVal > 0.15) {
+            const p2 = Math.min(1.0, (progressVal - 0.15) / 0.15);
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 8;
+            
+            if (p2 >= 0.5) {
+                ctx.strokeRect(28, 28, 456, 456);
+            } else {
+                ctx.beginPath();
+                const totalLen = 456 * 4;
+                const drawLen = totalLen * (p2 * 2);
+                ctx.moveTo(28, 28);
+                let cur = 0;
+                if (cur + 456 <= drawLen) { ctx.lineTo(484, 28); cur += 456; } else { ctx.lineTo(28 + (drawLen - cur), 28); cur = drawLen; }
+                if (cur < drawLen) { if (cur + 456 <= drawLen) { ctx.lineTo(484, 484); cur += 456; } else { ctx.lineTo(484, 28 + (drawLen - cur)); cur = drawLen; } }
+                if (cur < drawLen) { if (cur + 456 <= drawLen) { ctx.lineTo(28, 484); cur += 456; } else { ctx.lineTo(484 - (drawLen - cur), 484); cur = drawLen; } }
+                if (cur < drawLen) { ctx.lineTo(28, 484 - (drawLen - cur)); }
+                ctx.stroke();
+            }
+            
+            if (p2 >= 1.0) {
+                ctx.strokeRect(36, 36, 440, 440);
+            } else if (p2 > 0.5) {
+                const subP = (p2 - 0.5) * 2;
+                ctx.beginPath();
+                const totalLen = 440 * 4;
+                const drawLen = totalLen * subP;
+                ctx.moveTo(36, 36);
+                let cur = 0;
+                if (cur + 440 <= drawLen) { ctx.lineTo(476, 36); cur += 440; } else { ctx.lineTo(36 + (drawLen - cur), 36); cur = drawLen; }
+                if (cur < drawLen) { if (cur + 440 <= drawLen) { ctx.lineTo(476, 476); cur += 440; } else { ctx.lineTo(476, 36 + (drawLen - cur)); cur = drawLen; } }
+                if (cur < drawLen) { if (cur + 440 <= drawLen) { ctx.lineTo(36, 476); cur += 440; } else { ctx.lineTo(476 - (drawLen - cur), 476); cur = drawLen; } }
+                if (cur < drawLen) { ctx.lineTo(36, 476 - (drawLen - cur)); }
+                ctx.stroke();
+            }
+        }
+        
+        // 3. Orange Infill (drawn between 0.30 and 1.0 progress)
+        if (progressVal > 0.30) {
+            const infillP = Math.min(1.0, (progressVal - 0.30) / 0.70);
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 4;
+            
+            const infillPattern = state.slicerSettings?.infillPattern || 'Gyroid';
+            if (infillPattern === 'Gyroid') {
+                const yLines = [];
+                for (let y = 50; y < 460; y += 40) {
+                    yLines.push(y);
+                }
+                const totalInfillPoints = yLines.length * 28;
+                const drawPointsCount = Math.ceil(totalInfillPoints * infillP);
+                
+                let currentPointIdx = 0;
+                for (let y of yLines) {
+                    if (currentPointIdx >= drawPointsCount) break;
+                    ctx.beginPath();
+                    let isFirst = true;
+                    for (let x = 50; x <= 455; x += 15) {
+                        if (currentPointIdx >= drawPointsCount) break;
+                        const wave = Math.sin((x / 30) + (y / 30)) * 15;
+                        if (isFirst) {
+                            ctx.moveTo(x, y + wave);
+                            isFirst = false;
+                        } else {
+                            ctx.lineTo(x, y + wave);
+                        }
+                        currentPointIdx++;
+                    }
+                    ctx.stroke();
+                }
+            } else {
+                const gridLines = [];
+                for (let i = 50; i < 460; i += 50) {
+                    gridLines.push({ type: 'v', val: i });
+                    gridLines.push({ type: 'h', val: i });
+                }
+                const drawCount = Math.ceil(gridLines.length * infillP);
+                for (let idx = 0; idx < drawCount; idx++) {
+                    const line = gridLines[idx];
+                    ctx.beginPath();
+                    if (line.type === 'v') {
+                        ctx.moveTo(line.val, 50);
+                        ctx.lineTo(line.val, 460);
+                    } else {
+                        ctx.moveTo(50, line.val);
+                        ctx.lineTo(460, line.val);
+                    }
+                    ctx.stroke();
+                }
+            }
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(4, 4);
+        return texture;
+    }, [state.slicerSettings?.infillPattern, slicerPathProgress]);
+
+    const bw = bounds?.x || state.shape.width || 180;
+    const tabHeight = state.laceHole.enabled ? 8.75 : 0;
+    const bh = (bounds?.y ? bounds.y - tabHeight : state.shape.height - tabHeight) || 88.8;
+    const cornerR = state.shape.cornerRadius || 25;
+    
+    const baseShape = React.useMemo(() => {
+        return createDynamicBaseShape(bw, bh, cornerR);
+    }, [bw, bh, cornerR]);
+
+    const frameShape = React.useMemo(() => {
+        let topBandH = 28;
+        let botBandH = 22;
+        let sideMargin = 8;
+        const pad = state.shape.padding || 8;
+
+        if (state.shape.autoSize) {
+            let calcTopBand = pad + 15;
+            let calcBotBand = pad + 15;
+            topBandH = calcTopBand;
+            botBandH = calcBotBand;
+            sideMargin = pad;
+        } else {
+            const heightRatio = bh / 80;
+            const widthRatio = bw / 180;
+            topBandH = 28 * heightRatio;
+            botBandH = 22 * heightRatio;
+            sideMargin = 8 * widthRatio;
+        }
+
+        return createDynamicFrameShape(
+            bw,
+            bh,
+            cornerR,
+            sideMargin,
+            topBandH,
+            botBandH,
+            state.shape.innerRadius ?? 20,
+        );
+    }, [bw, bh, cornerR, state.shape.padding, state.shape.autoSize, state.shape.innerRadius]);
     const [baseGeo, setBaseGeo] = useState<THREE.BufferGeometry | null>(null);
     const [frameGeo, setFrameGeo] = useState<THREE.BufferGeometry | null>(null);
     const [topText, setTopText] = useState<{
@@ -215,7 +458,7 @@ const Generator2: React.FC<SceneProps> = ({
                         curveSegments: 16,
                     },
                 );
-                rawFrame.translate(0, 0, 0.01); // 0.01mm micro-gap to prevent slicer layer sharing
+                rawFrame.translate(0, 0, -0.1); // Enforce 0.1mm physical overlap with the base plate to prevent slicer gaps
                 rawFrame.computeVertexNormals();
                 setFrameGeo(rawFrame);
 
@@ -228,7 +471,7 @@ const Generator2: React.FC<SceneProps> = ({
                     rawTop.g.translate(
                         -rawTop.cx,
                         topTextY - rawTop.line.size * 0.35,
-                        frameThick + 0.02,
+                        frameThick - 0.2, // Enforce 0.1mm physical overlap with the top frame
                     );
                     rawTop.g.computeVertexNormals();
                 }
@@ -236,7 +479,7 @@ const Generator2: React.FC<SceneProps> = ({
                     rawCenter.g.translate(
                         -rawCenter.cx,
                         centerTextY - rawCenter.cy,
-                        0.01,
+                        -0.1, // Enforce 0.1mm physical overlap with the base plate
                     );
                     rawCenter.g.computeVertexNormals();
                 }
@@ -244,7 +487,7 @@ const Generator2: React.FC<SceneProps> = ({
                     rawBottom.g.translate(
                         -rawBottom.cx,
                         botTextY - rawBottom.line.size * 0.35,
-                        frameThick + 0.02,
+                        frameThick - 0.2, // Enforce 0.1mm physical overlap with the bottom frame
                     );
                     rawBottom.g.computeVertexNormals();
                 }
@@ -295,55 +538,167 @@ const Generator2: React.FC<SceneProps> = ({
     return (
         <Center disableZ>
             <group ref={meshRef}>
-                {/* Layer 1: White Base Plate */}
+                {/* 1. Main Sliced (Clipped) Model with Striated layers */}
                 {baseGeo && (
-                    <mesh geometry={baseGeo} castShadow receiveShadow>
+                    <mesh geometry={baseGeo} name="base" castShadow receiveShadow>
                         <meshStandardMaterial
                             color={ds.baseColor || "#ffffff"}
-                            roughness={0.3}
+                            map={striatedTexture}
+                            roughness={0.35}
+                            flatShading={true}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={clippingPlanes}
                         />
                     </mesh>
                 )}
 
-                {/* Layer 2: Brown Frame */}
                 {frameGeo && (
-                    <mesh geometry={frameGeo} castShadow receiveShadow>
+                    <mesh geometry={frameGeo} name="border" castShadow receiveShadow>
                         <meshStandardMaterial
                             color={ds.borderColor || "#4a3525"}
-                            roughness={0.3}
+                            map={striatedTexture}
+                            roughness={0.35}
+                            flatShading={true}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={clippingPlanes}
                         />
                     </mesh>
                 )}
 
-                {/* Center Text (Inside cutout, sits on white base) */}
                 {centerText && (
-                    <mesh geometry={centerText.g} castShadow receiveShadow>
+                    <mesh geometry={centerText.g} name="text" castShadow receiveShadow>
                         <meshStandardMaterial
                             color={centerText.color}
-                            roughness={0.25}
+                            map={striatedTexture}
+                            roughness={0.3}
                             metalness={0.05}
+                            flatShading={true}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={clippingPlanes}
                         />
                     </mesh>
                 )}
 
-                {/* Top Text (Sits elevated on brown frame) */}
                 {topText && (
-                    <mesh geometry={topText.g} castShadow receiveShadow>
+                    <mesh geometry={topText.g} name="text" castShadow receiveShadow>
                         <meshStandardMaterial
                             color={topText.color}
-                            roughness={0.25}
+                            map={striatedTexture}
+                            roughness={0.3}
                             metalness={0.05}
+                            flatShading={true}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={clippingPlanes}
                         />
                     </mesh>
                 )}
 
-                {/* Bottom Text (Sits elevated on brown frame) */}
                 {bottomText && (
-                    <mesh geometry={bottomText.g} castShadow receiveShadow>
+                    <mesh geometry={bottomText.g} name="text" castShadow receiveShadow>
                         <meshStandardMaterial
                             color={bottomText.color}
-                            roughness={0.25}
+                            map={striatedTexture}
+                            roughness={0.3}
                             metalness={0.05}
+                            flatShading={true}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={clippingPlanes}
+                        />
+                    </mesh>
+                )}
+
+                {/* 2. Flat Solid Caps on Slicing cutoffZ Plane */}
+                {activeLayer !== undefined && activeLayer < totalLayers && baseShape && (
+                    <mesh position={[0, 0, cutoffZ]} rotation={[0, 0, 0]} receiveShadow>
+                        <shapeGeometry args={[baseShape]} />
+                        <meshStandardMaterial
+                            map={toolpathTexture}
+                            roughness={0.4}
+                            metalness={0.1}
+                            side={THREE.DoubleSide}
+                        />
+                    </mesh>
+                )}
+
+                {activeLayer !== undefined && activeLayer < totalLayers && frameShape && cutoffZ > -0.1 && (
+                    <mesh position={[0, 0, cutoffZ]} rotation={[0, 0, 0]} castShadow>
+                        <shapeGeometry args={[frameShape]} />
+                        <meshStandardMaterial
+                            color={ds.borderColor || "#4a3525"}
+                            roughness={0.4}
+                            metalness={0.1}
+                            side={THREE.DoubleSide}
+                        />
+                    </mesh>
+                )}
+
+                {/* 3. Ghosted Upper Part (Translucent silhouette above cutoffZ) */}
+                {baseGeo && activeLayer !== undefined && activeLayer < totalLayers && (
+                    <mesh geometry={baseGeo} name="base-ghost">
+                        <meshStandardMaterial
+                            color={ds.baseColor || "#ffffff"}
+                            roughness={0.5}
+                            transparent={true}
+                            opacity={0.12}
+                            depthWrite={false}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={ghostClippingPlanes}
+                        />
+                    </mesh>
+                )}
+
+                {frameGeo && activeLayer !== undefined && activeLayer < totalLayers && (
+                    <mesh geometry={frameGeo} name="border-ghost">
+                        <meshStandardMaterial
+                            color={ds.borderColor || "#4a3525"}
+                            roughness={0.5}
+                            transparent={true}
+                            opacity={0.12}
+                            depthWrite={false}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={ghostClippingPlanes}
+                        />
+                    </mesh>
+                )}
+
+                {centerText && activeLayer !== undefined && activeLayer < totalLayers && (
+                    <mesh geometry={centerText.g} name="text-ghost">
+                        <meshStandardMaterial
+                            color={centerText.color}
+                            roughness={0.5}
+                            transparent={true}
+                            opacity={0.12}
+                            depthWrite={false}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={ghostClippingPlanes}
+                        />
+                    </mesh>
+                )}
+
+                {topText && activeLayer !== undefined && activeLayer < totalLayers && (
+                    <mesh geometry={topText.g} name="text-ghost">
+                        <meshStandardMaterial
+                            color={topText.color}
+                            roughness={0.5}
+                            transparent={true}
+                            opacity={0.12}
+                            depthWrite={false}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={ghostClippingPlanes}
+                        />
+                    </mesh>
+                )}
+
+                {bottomText && activeLayer !== undefined && activeLayer < totalLayers && (
+                    <mesh geometry={bottomText.g} name="text-ghost">
+                        <meshStandardMaterial
+                            color={bottomText.color}
+                            roughness={0.5}
+                            transparent={true}
+                            opacity={0.12}
+                            depthWrite={false}
+                            side={THREE.DoubleSide}
+                            clippingPlanes={ghostClippingPlanes}
                         />
                     </mesh>
                 )}
@@ -352,12 +707,81 @@ const Generator2: React.FC<SceneProps> = ({
     );
 };
 
+interface NozzleProps {
+    bounds?: { x: number; y: number; z: number };
+    activeLayer?: number;
+    totalLayers?: number;
+    slicerPathProgress?: number;
+    floorZ: number;
+}
+
+const PrintNozzle: React.FC<NozzleProps> = ({
+    bounds,
+    activeLayer,
+    totalLayers,
+    slicerPathProgress,
+    floorZ,
+}) => {
+    if (activeLayer === undefined || totalLayers === undefined) return null;
+
+    const zHeight = bounds?.z || 4.5;
+    const width = bounds?.x || 75;
+    const height = bounds?.y || 40;
+    
+    const nozzleZ = floorZ + (activeLayer / totalLayers) * zHeight;
+    const t = (slicerPathProgress || 100) / 100;
+    
+    // FDM Toolpath Path Generation: 30% outer shell, 70% infill raster
+    let nozzleX = 0;
+    let nozzleY = 0;
+    
+    if (t < 0.3) {
+        const perimeterT = t / 0.3;
+        const angle = perimeterT * Math.PI * 2;
+        nozzleX = (Math.cos(angle) * width) / 2;
+        nozzleY = (Math.sin(angle) * height) / 2;
+    } else {
+        const infillT = (t - 0.3) / 0.7;
+        const numScans = 10;
+        const scanIndex = Math.floor(infillT * numScans);
+        const scanLineT = (infillT * numScans) % 1;
+        const currentX = -width / 2 + (scanIndex / Math.max(1, numScans - 1)) * width;
+        const startY = -height / 2;
+        const endY = height / 2;
+        
+        nozzleX = currentX;
+        nozzleY = scanIndex % 2 === 0 ? startY + scanLineT * (endY - startY) : endY - scanLineT * (endY - startY);
+    }
+
+    return (
+        <group position={[nozzleX, nozzleY, nozzleZ]}>
+            {/* The heated print head tip (cone) */}
+            <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 8]}>
+                <coneGeometry args={[3, 16, 16]} />
+                <meshStandardMaterial color="#475569" roughness={0.5} metalness={0.8} />
+            </mesh>
+            {/* Glowing brass tip */}
+            <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 0.5]}>
+                <coneGeometry args={[0.8, 1, 12]} />
+                <meshStandardMaterial color="#ca8a04" roughness={0.2} metalness={0.9} emissive="#caca24" emissiveIntensity={0.6} />
+            </mesh>
+            {/* Extremely hot heated filament node */}
+            <mesh position={[0, 0, 0]}>
+                <sphereGeometry args={[0.4, 8, 8]} />
+                <meshBasicMaterial color="#ff7800" />
+            </mesh>
+            {/* Tip point light to illuminate the layered plastic */}
+            <pointLight distance={15} intensity={2.0} color="#ffaa00" />
+        </group>
+    );
+};
+
 const Scene2: React.FC<SceneProps> = (props) => {
     const baseThickness = props.state.shape.baseThickness || 3.0;
     const floorZ = -baseThickness;
 
     return (
-        <Canvas shadows camera={{ position: [0, -120, 90], fov: 40 }}>
+        <Canvas shadows camera={{ position: [0, -120, 90], fov: 40 }} gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }}>
             <color attach="background" args={["#f8f9fa"]} />
             <ambientLight intensity={0.6} />
             <directionalLight
@@ -369,6 +793,16 @@ const Scene2: React.FC<SceneProps> = (props) => {
             <directionalLight position={[-10, 10, -10]} intensity={0.4} />
 
             <Generator2 {...props} />
+
+            {props.activeLayer !== undefined && props.totalLayers !== undefined && (
+                <PrintNozzle
+                    bounds={props.bounds}
+                    activeLayer={props.activeLayer}
+                    totalLayers={props.totalLayers}
+                    slicerPathProgress={props.slicerPathProgress}
+                    floorZ={floorZ}
+                />
+            )}
 
             <mesh position={[0, 0, floorZ - 0.05]} receiveShadow>
                 <planeGeometry args={[500, 500]} />
