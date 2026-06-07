@@ -343,4 +343,8 @@ const ScenePencil: React.FC<SceneProps> = (props) => {
     );
 };
 
+export { Generator as GeneratorPencil };
 export default ScenePencil;
+
+
+

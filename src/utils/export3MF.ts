@@ -1,69 +1,56 @@
 import * as THREE from "three";
 import JSZip from "jszip";
-import { Evaluator, Brush, ADDITION } from "three-bvh-csg";
 
 export async function export3MF(
     group: THREE.Group,
     filename: string = "export.3mf",
 ) {
-    const meshes: THREE.Mesh[] = [];
-    group.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-            meshes.push(child as THREE.Mesh);
-        }
-    });
+    group.updateMatrixWorld(true);
 
-    if (meshes.length === 0) return;
+    const exportRoots = group.children.filter((child) =>
+        hasMeshDescendant(child),
+    );
+    const units = exportRoots.length > 0 ? exportRoots : [group];
 
-    // 1. Separate base, border, and other (text) meshes
-    const baseMeshes = meshes.filter((m) => m.name === "base");
-    const borderMeshes = meshes.filter((m) => m.name === "border");
-    const textMeshes = meshes.filter((m) => m.name === "text" || (!m.name && m !== baseMeshes[0] && m !== borderMeshes[0]));
+    const unitEntries = units
+        .map((root) => {
+            root.updateMatrixWorld(true);
 
-    const processedMeshes: THREE.Mesh[] = [];
+            const meshes: THREE.Mesh[] = [];
+            root.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) {
+                    meshes.push(child as THREE.Mesh);
+                }
+            });
 
-    // Add all base and border meshes in world coordinates directly (perfect watertight meshes)
-    baseMeshes.forEach((m) => {
-        const cloned = new THREE.Mesh(m.geometry.clone(), m.material);
-        cloned.geometry.applyMatrix4(m.matrixWorld);
-        cloned.matrixWorld.identity();
-        processedMeshes.push(cloned);
-    });
-    borderMeshes.forEach((m) => {
-        const cloned = new THREE.Mesh(m.geometry.clone(), m.material);
-        cloned.geometry.applyMatrix4(m.matrixWorld);
-        cloned.matrixWorld.identity();
-        processedMeshes.push(cloned);
-    });
+            return {
+                root,
+                meshes,
+                transform: matrixTo3mfTransform(root.matrixWorld),
+                inverseRootMatrix: new THREE.Matrix4()
+                    .copy(root.matrixWorld)
+                    .invert(),
+            };
+        })
+        .filter((unit) => unit.meshes.length > 0);
 
-    // Add all text meshes, transformed to world space with identity matrixWorld
-    textMeshes.forEach((m) => {
-        const cloned = new THREE.Mesh(m.geometry.clone(), m.material);
-        cloned.geometry.applyMatrix4(m.matrixWorld);
-        cloned.matrixWorld.identity();
-        processedMeshes.push(cloned);
-    });
+    if (unitEntries.length === 0) return;
 
-    // Collect distinct colors from processed meshes
     const uniqueColors: string[] = [];
-    processedMeshes.forEach((mesh) => {
-        let colorHex = "#FFFFFF";
-        if (mesh.material) {
-            const material = Array.isArray(mesh.material)
-                ? mesh.material[0]
-                : mesh.material;
-            if ((material as any).color) {
-                // Get color in hex (e.g. #FFFFFF)
-                colorHex =
-                    "#" + (material as any).color.getHexString().toUpperCase();
+    unitEntries.forEach(({ meshes }) => {
+        meshes.forEach((mesh) => {
+            const colorWithAlpha = getMeshColor(mesh);
+            if (!uniqueColors.includes(colorWithAlpha)) {
+                uniqueColors.push(colorWithAlpha);
             }
-        }
-        // Force full opacity for the color group (3MF uses ARGB, e.g. #FFFFFFFF)
-        // Actually, the format is #RRGGBBAA. Let's use #RRGGBBFF
-        const colorWithAlpha = colorHex + "FF";
-        if (!uniqueColors.includes(colorWithAlpha)) {
-            uniqueColors.push(colorWithAlpha);
-        }
+        });
+    });
+
+    const meshColorIndex = new Map<THREE.Mesh, number>();
+    unitEntries.forEach(({ meshes }) => {
+        meshes.forEach((mesh) => {
+            meshColorIndex.set(mesh, uniqueColors.indexOf(getMeshColor(mesh)));
+        });
     });
 
     let resourcesXml = `    <m:colorgroup id="1">\n`;
@@ -73,53 +60,56 @@ export async function export3MF(
     resourcesXml += `    </m:colorgroup>\n`;
 
     let nextObjectId = 2; // ID 1 is for colorgroup
-    let componentsXml = `  <object id="9999" type="model">\n    <components>\n`;
+    let buildXml = `  <build>\n`;
 
-    processedMeshes.forEach((mesh) => {
-        const geometry = mesh.geometry;
-        if (!geometry || !geometry.attributes.position) return;
+    unitEntries.forEach(({ meshes, transform, inverseRootMatrix }) => {
+        const unitObjectId = nextObjectId++;
+        let componentsXml = `    <object id="${unitObjectId}" type="model">\n      <components>\n`;
 
-        // Apply world transform if needed, or local transform relative to group
-        const positionAttr = geometry.attributes.position;
-        const indexAttr = geometry.index;
-        const posArray = positionAttr.array;
+        meshes.forEach((mesh) => {
+            const geometry = mesh.geometry;
+            if (!geometry || !geometry.attributes.position) return;
 
-        const positionVector = new THREE.Vector3();
+            const positionAttr = geometry.attributes.position;
+            const indexAttr = geometry.index;
+            const positionVector = new THREE.Vector3();
+            const localMatrix = new THREE.Matrix4().multiplyMatrices(
+                inverseRootMatrix,
+                mesh.matrixWorld,
+            );
+            const meshObjectId = nextObjectId++;
 
-        let objectXml = `    <object id="${nextObjectId}" type="model" pid="1" pindex="${uniqueColors.indexOf(getMeshColor(mesh))}">\n      <mesh>\n        <vertices>\n`;
+            let objectXml = `        <object id="${meshObjectId}" type="model" pid="1" pindex="${meshColorIndex.get(mesh) ?? 0}">\n          <mesh>\n            <vertices>\n`;
 
-        for (let i = 0; i < positionAttr.count; i++) {
-            positionVector.fromBufferAttribute(positionAttr, i);
-            positionVector.applyMatrix4(mesh.matrixWorld);
-            // 3MF uses Z up, but three.js often does too in our specific scene setup.
-            // Our scene uses Y up for the camera but the plate is drawn flat on XY plane and extruded along Z.
-            objectXml += `          <vertex x="${positionVector.x.toFixed(5)}" y="${positionVector.y.toFixed(5)}" z="${positionVector.z.toFixed(5)}"/>\n`;
-        }
-        objectXml += `        </vertices>\n        <triangles>\n`;
-
-        if (indexAttr) {
-            const indices = indexAttr.array;
-            for (let i = 0; i < indices.length; i += 3) {
-                objectXml += `          <triangle v1="${indices[i]}" v2="${indices[i + 1]}" v3="${indices[i + 2]}"/>\n`;
+            for (let i = 0; i < positionAttr.count; i++) {
+                positionVector.fromBufferAttribute(positionAttr, i);
+                objectXml += `              <vertex x="${positionVector.x.toFixed(5)}" y="${positionVector.y.toFixed(5)}" z="${positionVector.z.toFixed(5)}"/>\n`;
             }
-        } else {
-            for (let i = 0; i < positionAttr.count; i += 3) {
-                objectXml += `          <triangle v1="${i}" v2="${i + 1}" v3="${i + 2}"/>\n`;
+            objectXml += `            </vertices>\n            <triangles>\n`;
+
+            if (indexAttr) {
+                const indices = indexAttr.array;
+                for (let i = 0; i < indices.length; i += 3) {
+                    objectXml += `              <triangle v1="${indices[i]}" v2="${indices[i + 1]}" v3="${indices[i + 2]}"/>\n`;
+                }
+            } else {
+                for (let i = 0; i < positionAttr.count; i += 3) {
+                    objectXml += `              <triangle v1="${i}" v2="${i + 1}" v3="${i + 2}"/>\n`;
+                }
             }
-        }
 
-        objectXml += `        </triangles>\n      </mesh>\n    </object>\n`;
-        resourcesXml += objectXml;
+            objectXml += `            </triangles>\n          </mesh>\n        </object>\n`;
+            resourcesXml += objectXml;
 
-        componentsXml += `      <component objectid="${nextObjectId}" transform="1 0 0 0 1 0 0 0 1 0 0 0" />\n`;
+            componentsXml += `        <component objectid="${meshObjectId}" transform="${matrixTo3mfTransform(localMatrix)}" />\n`;
+        });
 
-        nextObjectId++;
+        componentsXml += `      </components>\n    </object>\n`;
+        resourcesXml += componentsXml;
+        buildXml += `    <item objectid="${unitObjectId}" transform="${transform}" />\n`;
     });
 
-    componentsXml += `    </components>\n  </object>\n`;
-    resourcesXml += componentsXml;
-
-    let buildXml = `  <build>\n    <item objectid="9999" transform="1 0 0 0 1 0 0 0 1 0 0 0" />\n  </build>\n`;
+    buildXml += `  </build>\n`;
 
     const modelXml = `<?xml version="1.0" encoding="utf-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">
@@ -157,6 +147,37 @@ ${buildXml}</model>`;
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
     }, 100);
+}
+
+function hasMeshDescendant(object: THREE.Object3D): boolean {
+    let found = false;
+    object.traverse((child) => {
+        if (found) return;
+        if ((child as THREE.Mesh).isMesh) {
+            found = true;
+        }
+    });
+    return found;
+}
+
+function matrixTo3mfTransform(matrix: THREE.Matrix4): string {
+    const elements = matrix.elements;
+    return [
+        elements[0],
+        elements[4],
+        elements[8],
+        elements[12],
+        elements[1],
+        elements[5],
+        elements[9],
+        elements[13],
+        elements[2],
+        elements[6],
+        elements[10],
+        elements[14],
+    ]
+        .map((value) => Number(value).toFixed(6))
+        .join(" ");
 }
 
 function getMeshColor(mesh: THREE.Mesh): string {

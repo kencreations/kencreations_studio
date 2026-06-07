@@ -505,7 +505,7 @@ const ModelLoader: React.FC<{
 };
 
 const SceneClicker: React.FC<SceneProps> = (props) => {
-    const { activeLayer, totalLayers, slicerPathProgress, isSlicing } = props;
+    
     const [bounds, setBounds] = useState<THREE.Box3 | null>(null);
 
     const floorZ = useMemo(() => {

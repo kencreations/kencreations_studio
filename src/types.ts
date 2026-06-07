@@ -8,7 +8,17 @@ export interface TextLine {
     letterSpacing?: number;
 }
 
+export interface BatchTag {
+    id: string;
+    lines: string[];
+    baseColor?: string;
+    textColor?: string;
+    borderColor?: string;
+}
+
 export interface AppState {
+    isProcessing?: boolean;
+    processingMessage?: string;
     lines: TextLine[];
     lineSpacing: number;
     textColor: string;
@@ -35,6 +45,11 @@ export interface AppState {
         topBorder: number;
         innerRadius: number;
         borderWidth?: number;
+    };
+    massCreation?: {
+        enabled: boolean;
+        printerType: "A1" | "A1 Mini" | "X1 Carbon" | "P1S";
+        tags: BatchTag[];
     };
 }
 

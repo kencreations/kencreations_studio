@@ -827,4 +827,8 @@ const Scene2: React.FC<SceneProps> = (props) => {
     );
 };
 
+export { Generator2 };
 export default Scene2;
+
+
+

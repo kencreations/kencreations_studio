@@ -1019,4 +1019,8 @@ const Scene: React.FC<SceneProps> = (props) => {
     );
 };
 
+export { Generator };
 export default Scene;
+
+
+

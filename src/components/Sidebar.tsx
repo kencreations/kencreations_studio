@@ -633,6 +633,104 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="sidebar-content">
+                {/* MASS CREATION SECTION */}
+                <div className="control-group" style={{ marginBottom: "16px", backgroundColor: state.massCreation?.enabled ? "rgba(99, 102, 241, 0.05)" : "transparent", padding: "12px", borderRadius: "8px", border: state.massCreation?.enabled ? "1px solid rgba(99, 102, 241, 0.2)" : "1px solid transparent", transition: "all 0.2s" }}>
+                    <h2
+                        className="control-title"
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            justifyContent: "space-between",
+                            margin: 0
+                        }}>
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                cursor: "pointer",
+                                margin: 0,
+                                fontWeight: 700,
+                                color: state.massCreation?.enabled ? "#6366f1" : "var(--text-secondary)",
+                            }}>
+                            <input 
+                                type="checkbox" 
+                                checked={state.massCreation?.enabled || false}
+                                onChange={(e) => updateState({ massCreation: { ...state.massCreation, printerType: state.massCreation?.printerType || "A1 Mini", tags: state.massCreation?.tags || [], enabled: e.target.checked } })}
+                                style={{ accentColor: "#6366f1" }}
+                            />
+                            Mass Creation Mode
+                        </label>
+                    </h2>
+                    {state.massCreation?.enabled && (
+                        <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            <div className="control-item">
+                                <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                    <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: 700, color: "var(--text-tertiary)" }}>Printer Build Plate</span>
+                                    <select 
+                                        style={{
+                                            padding: "6px",
+                                            borderRadius: "4px",
+                                            border: "1px solid var(--border-color)",
+                                            backgroundColor: "var(--bg-primary)",
+                                            color: "var(--text-primary)",
+                                            fontSize: "12px",
+                                            outline: "none"
+                                        }}
+                                        value={state.massCreation.printerType || "A1 Mini"}
+                                        onChange={(e) => updateState({ massCreation: { ...state.massCreation, printerType: e.target.value as any, tags: state.massCreation?.tags || [], enabled: true } })}
+                                    >
+                                        <option value="A1 Mini">A1 Mini (180x180)</option>
+                                        <option value="A1">A1 (256x256)</option>
+                                        <option value="P1S">P1S (256x256)</option>
+                                        <option value="X1 Carbon">X1 Carbon (256x256)</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div className="control-item">
+                                <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                    <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: 700, color: "var(--text-tertiary)" }}>Data Source (Excel)</span>
+                                    <input 
+                                        type="file" 
+                                        accept=".xlsx, .xls"
+                                        onChange={async (e) => {
+                                            if (e.target.files && e.target.files.length > 0) {
+                                                const file = e.target.files[0];
+                                                e.target.value = ''; // Clear value to allow re-upload
+                                                updateState({ isProcessing: true, processingMessage: "Parsing Excel and laying out batch tags..." });
+                                                try {
+                                                    const { parseExcelTags } = await import('../utils/excelParser');
+                                                    const tags = await parseExcelTags(file);
+                                                    
+                                                    // Give UI a moment to show the loader, then update tags
+                                                    setTimeout(() => {
+                                                        updateState({ 
+                                                            massCreation: { ...state.massCreation, printerType: state.massCreation?.printerType || "A1 Mini", tags, enabled: true },
+                                                            isProcessing: false,
+                                                            processingMessage: undefined
+                                                        });
+                                                    }, 500);
+                                                    
+                                                } catch (err) {
+                                                    updateState({ isProcessing: false, processingMessage: undefined });
+                                                    alert("Error parsing excel: " + err);
+                                                }
+                                            }
+                                        }}
+                                        style={{ fontSize: "11px" }}
+                                    />
+                                </label>
+                            </div>
+                            {state.massCreation.tags && state.massCreation.tags.length > 0 && (
+                                <div style={{ fontSize: "11px", color: "#10b981", fontWeight: 500, padding: "4px", backgroundColor: "rgba(16, 185, 129, 0.1)", borderRadius: "4px", textAlign: "center" }}>
+                                    Loaded {state.massCreation.tags.length} tags successfully.
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 {/* PRESETS SECTION */}
                 <div className="control-group" style={{ marginBottom: "16px" }}>
                     <h2

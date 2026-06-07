@@ -662,7 +662,7 @@ const PrintNozzle: React.FC<{
 };
 
 const Scene3: React.FC<SceneProps> = (props) => {
-    const { activeLayer, totalLayers, bounds, slicerPathProgress } = props;
+    const { bounds } = props;
     const baseThickness = props.state.shape.baseThickness || 3.0;
     const floorZ = -baseThickness / 2;
 
@@ -722,4 +722,8 @@ const Scene3: React.FC<SceneProps> = (props) => {
     );
 };
 
+export { Generator3 };
 export default Scene3;
+
+
+
