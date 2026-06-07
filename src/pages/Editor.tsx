@@ -1,26 +1,91 @@
-import React, { useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import React, { useState, useRef, useEffect } from "react";
+import { useParams, useLocation } from "react-router-dom";
+import { RAW_TOOLS } from "./Home";
 
 import Sidebar from "../components/Sidebar";
 import Scene from "../components/Scene";
 import Scene2 from "../components/Scene2";
 import Scene3 from "../components/Scene3";
+import Scene4 from "../components/Scene4";
 import ScenePencil from "../components/ScenePencil";
 import { BuildPlatePreview } from "../components/BuildPlatePreview";
 import type { AppState } from "../types";
 import { FONTS } from "../types";
-import { Download, Camera, Box, X, Plus, Trash2, Zap, Settings, Activity, Cpu, Play, CheckCircle, RotateCcw, AlertTriangle, Printer, Layers } from "lucide-react";
+import {
+    Download,
+    Camera,
+    Box,
+    X,
+    Plus,
+    Trash2,
+    Zap,
+    Settings,
+    Activity,
+    Cpu,
+    Play,
+    CheckCircle,
+    RotateCcw,
+    AlertTriangle,
+    Printer,
+    Layers,
+} from "lucide-react";
 import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
 import { export3MF } from "../utils/export3MF";
 import * as THREE from "three";
 import { Evaluator, Brush, ADDITION } from "three-bvh-csg";
+
+import { auth, db } from "../firebaseConfig"; // Ensure this import is correct
+import { doc, getDoc } from "firebase/firestore";
+import { AuthModal } from "../components/AuthModal";
 import JSZip from "jszip";
+import { AuthOverlay } from "../components/AuthOverlay";
 
 const Editor: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+
+    // 1. ALL HOOKS FIRST
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [isAuthorized, setIsAuthorized] = useState(false);
+    const [checking, setChecking] = useState(true); // <--- ADD THIS
+
     const isPencilTopper = id === "pencil-topper";
     const isDesign2 = id === "id-name-tag-2";
     const isDesign3 = id === "id-name-tag-3";
+    const isDesign4 = id === "id-name-tag-4";
+
+    const location = useLocation();
+    const isFreeFeature = React.useMemo(() => {
+        const tool = RAW_TOOLS.find((t) => t.path === location.pathname);
+        if (!tool) return true;
+        if (tool.priceHint && tool.priceHint.toLowerCase() !== "free") {
+            return false;
+        }
+        return true;
+    }, [location.pathname]);
+
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                setChecking(false);
+                setIsAuthorized(false);
+                setShowAuthModal(true); // Show modal if not logged in
+                return;
+            }
+            if (isFreeFeature) {
+                setIsAuthorized(true);
+            } else {
+                const snap = await getDoc(doc(db, "users", user.uid));
+                if (snap.exists() && snap.data()?.isPaid) {
+                    setIsAuthorized(true);
+                } else {
+                    setIsAuthorized(false);
+                    setShowAuthModal(true); // Show modal if paid feature but not paid
+                }
+            }
+            setChecking(false);
+        });
+        return () => unsubscribe();
+    }, [id, isFreeFeature]);
     const design1State: AppState = {
         lines: [
             {
@@ -193,8 +258,60 @@ const Editor: React.FC = () => {
         },
     };
 
+    const design4State: AppState = {
+        lines: [
+            {
+                id: "1",
+                text: "NICKNAME",
+                font: FONTS[0].url,
+                size: 15,
+                depth: 1.7,
+            },
+            {
+                id: "2",
+                text: "Full Name / Tag",
+                font: FONTS[0].url,
+                size: 7,
+                depth: 1.0,
+            },
+        ],
+        lineSpacing: 2.0,
+        textColor: "#000000",
+        borderColor: "#000000",
+        baseColor: "#E4BD68",
+        laceHole: {
+            enabled: true,
+            width: 5,
+            height: 5,
+            topMargin: 0,
+            type: "default",
+        },
+        shape: {
+            modelType: 0,
+            autoSize: true,
+            padding: 10,
+            width: 140,
+            height: 48,
+            cornerRadius: 10,
+            amplitude: 0,
+            wavelength: 0,
+            baseThickness: 3.3,
+            topBorder: 1.5,
+            innerRadius: 10,
+            borderWidth: 2.0,
+        },
+    };
+
     const [state, setState] = useState<AppState>(
-        isPencilTopper ? pencilTopperState : (isDesign2 ? design2State : (isDesign3 ? design3State : design1State)),
+        isPencilTopper
+            ? pencilTopperState
+            : isDesign4
+              ? design4State
+              : isDesign2
+                ? design2State
+                : isDesign3
+                  ? design3State
+                  : design1State,
     );
 
     const [bounds, setBounds] = useState({ x: 75, y: 40, z: 4.5 });
@@ -208,24 +325,57 @@ const Editor: React.FC = () => {
     const [showCameraModal, setShowCameraModal] = useState(false);
     const [selectedFonts, setSelectedFonts] = useState<string[]>([]);
     const [colorCombos, setColorCombos] = useState([
-        { id: "1", name: "Cocoa & Cream", baseColor: "#F7E6DE", textColor: "#6F5034", borderColor: "#6F5034" },
-        { id: "2", name: "Azure Blue", baseColor: "#93C5FD", textColor: "#1E3A8A", borderColor: "#1E3A8A" },
-        { id: "3", name: "Strawberry Cream", baseColor: "#FFE4E6", textColor: "#E11D48", borderColor: "#E11D48" },
-        { id: "4", name: "Forest Gold", baseColor: "#E4BD68", textColor: "#14532D", borderColor: "#14532D" },
-        { id: "5", name: "Charcoal White", baseColor: "#FFFFFF", textColor: "#1F2937", borderColor: "#1F2937" },
+        {
+            id: "1",
+            name: "Cocoa & Cream",
+            baseColor: "#F7E6DE",
+            textColor: "#6F5034",
+            borderColor: "#6F5034",
+        },
+        {
+            id: "2",
+            name: "Azure Blue",
+            baseColor: "#93C5FD",
+            textColor: "#1E3A8A",
+            borderColor: "#1E3A8A",
+        },
+        {
+            id: "3",
+            name: "Strawberry Cream",
+            baseColor: "#FFE4E6",
+            textColor: "#E11D48",
+            borderColor: "#E11D48",
+        },
+        {
+            id: "4",
+            name: "Forest Gold",
+            baseColor: "#E4BD68",
+            textColor: "#14532D",
+            borderColor: "#14532D",
+        },
+        {
+            id: "5",
+            name: "Charcoal White",
+            baseColor: "#FFFFFF",
+            textColor: "#1F2937",
+            borderColor: "#1F2937",
+        },
     ]);
     const [customComboName, setCustomComboName] = useState("");
     const [customBaseColor, setCustomBaseColor] = useState("#3B82F6");
     const [customTextColor, setCustomTextColor] = useState("#FFFFFF");
     const [customBorderColor, setCustomBorderColor] = useState("#3B82F6");
-    
+
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationProgress, setGenerationProgress] = useState("");
     const [generationPercent, setGenerationPercent] = useState(0);
 
-
     const openCameraModal = () => {
-        const currentFont = isPencilTopper ? state.lines[0]?.font : (state.lines.length >= 2 ? state.lines[1].font : state.lines[0]?.font);
+        const currentFont = isPencilTopper
+            ? state.lines[0]?.font
+            : state.lines.length >= 2
+              ? state.lines[1].font
+              : state.lines[0]?.font;
         const fontList = [
             currentFont,
             FONTS[0].url, // Titan One
@@ -233,9 +383,9 @@ const Editor: React.FC = () => {
             FONTS[6].url, // Bebas Neue
             FONTS[8].url, // Coiny
         ].filter((url, index, self) => url && self.indexOf(url) === index);
-        
+
         setSelectedFonts(fontList);
-        
+
         const activeCombo = {
             id: "current",
             name: "Current Design Colors",
@@ -243,12 +393,12 @@ const Editor: React.FC = () => {
             textColor: state.textColor,
             borderColor: state.borderColor,
         };
-        
+
         setColorCombos((prev) => [
             activeCombo,
             ...prev.filter((c) => c.id !== "current"),
         ]);
-        
+
         setShowCameraModal(true);
     };
 
@@ -274,7 +424,7 @@ const Editor: React.FC = () => {
 
     const toggleFontSelection = (url: string) => {
         setSelectedFonts((prev) =>
-            prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
+            prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
         );
     };
 
@@ -287,35 +437,41 @@ const Editor: React.FC = () => {
             alert("Please select at least one color combination.");
             return;
         }
-        
+
         setIsGenerating(true);
         setGenerationPercent(0);
-        
+
         const zip = new JSZip();
         const originalState = JSON.parse(JSON.stringify(state));
-        
+
         const canvas = document.querySelector("canvas");
         if (!canvas) {
             alert("Could not locate 3D Canvas element.");
             setIsGenerating(false);
             return;
         }
-        
-        const mainLineIndex = isPencilTopper ? 0 : (state.lines.length >= 2 ? 1 : 0);
+
+        const mainLineIndex = isPencilTopper
+            ? 0
+            : state.lines.length >= 2
+              ? 1
+              : 0;
         const totalSteps = selectedFonts.length * colorCombos.length;
         let stepCount = 0;
-        
+
         try {
             for (const fontUrl of selectedFonts) {
                 const fontObj = FONTS.find((f) => f.url === fontUrl);
                 const fontName = fontObj ? fontObj.name : "Font";
-                
+
                 for (const combo of colorCombos) {
                     stepCount++;
                     const percent = Math.round((stepCount / totalSteps) * 100);
                     setGenerationPercent(percent);
-                    setGenerationProgress(`Rendering option ${stepCount} of ${totalSteps}: ${fontName} (${combo.name})...`);
-                    
+                    setGenerationProgress(
+                        `Rendering option ${stepCount} of ${totalSteps}: ${fontName} (${combo.name})...`,
+                    );
+
                     // Create state updates
                     const updatedLines = state.lines.map((line, idx) => {
                         if (idx === mainLineIndex) {
@@ -323,7 +479,7 @@ const Editor: React.FC = () => {
                         }
                         return line;
                     });
-                    
+
                     const updatedState = {
                         ...state,
                         lines: updatedLines,
@@ -331,29 +487,32 @@ const Editor: React.FC = () => {
                         textColor: combo.textColor,
                         borderColor: combo.borderColor,
                     };
-                    
+
                     // Apply update
                     setState(updatedState);
-                    
+
                     // Wait for dynamic font rendering
                     await new Promise((resolve) => setTimeout(resolve, 600));
-                    
+
                     // Get base64 PNG data URL from Three.js canvas
                     const dataUrl = canvas.toDataURL("image/png");
                     const base64Data = dataUrl.split(",")[1];
-                    
+
                     const safeFontName = fontName.replace(/[^a-zA-Z0-9]/g, "");
-                    const safeComboName = combo.name.replace(/[^a-zA-Z0-9]/g, "_");
+                    const safeComboName = combo.name.replace(
+                        /[^a-zA-Z0-9]/g,
+                        "_",
+                    );
                     const filename = `preview_${safeFontName}_${safeComboName}.png`;
-                    
+
                     zip.file(filename, base64Data, { base64: true });
                 }
             }
-            
+
             setGenerationProgress("Creating ZIP folder...");
             setGenerationPercent(95);
             await new Promise((resolve) => setTimeout(resolve, 300));
-            
+
             const content = await zip.generateAsync({ type: "blob" });
             const url = URL.createObjectURL(content);
             const link = document.createElement("a");
@@ -364,7 +523,6 @@ const Editor: React.FC = () => {
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            
         } catch (error) {
             console.error("Batch screenshot catalog generation failed:", error);
             alert("Catalog generation encountered an unexpected error.");
@@ -382,11 +540,15 @@ const Editor: React.FC = () => {
                 ? state.lines[1].text.trim() || "nametag"
                 : state.lines[0]?.text.trim() || "nametag";
         const safeName = nameLine.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const prefix = isPencilTopper ? "pencil_topper" : (isDesign2 ? "idnametag_v2" : (isDesign3 ? "idnametag_v3" : "idnametag"));
+        const prefix = isPencilTopper
+            ? "pencil_topper"
+            : isDesign2
+              ? "idnametag_v2"
+              : isDesign3
+                ? "idnametag_v3"
+                : "idnametag";
         return `${prefix}_${safeName}.${ext}`;
     };
-
-
 
     const exportSTL = () => {
         if (!groupRef.current) return;
@@ -404,7 +566,11 @@ const Editor: React.FC = () => {
         // 1. Separate base, border, and other (text) meshes
         const baseMeshes = meshes.filter((m) => m.name === "base");
         const borderMeshes = meshes.filter((m) => m.name === "border");
-        const textMeshes = meshes.filter((m) => m.name === "text" || (!m.name && m !== baseMeshes[0] && m !== borderMeshes[0]));
+        const textMeshes = meshes.filter(
+            (m) =>
+                m.name === "text" ||
+                (!m.name && m !== baseMeshes[0] && m !== borderMeshes[0]),
+        );
 
         // 2. Add base and border meshes in world coordinates directly (perfect watertight meshes)
         baseMeshes.forEach((m) => {
@@ -445,11 +611,14 @@ const Editor: React.FC = () => {
         await export3MF(groupRef.current, getDownloadFilename("3mf"));
     };
 
-
-
     return (
         <div className="editor-layout">
-            {/* Floating Top Right Header/Navigation */}
+            {!isAuthorized && (
+                <AuthOverlay
+                    onUnlock={() => setIsAuthorized(true)}
+                    isFreeFeature={isFreeFeature}
+                />
+            )}
 
             <Sidebar
                 state={state}
@@ -458,6 +627,7 @@ const Editor: React.FC = () => {
                 isDesign2={isDesign2}
                 isPencilTopper={isPencilTopper}
                 isDesign3={isDesign3}
+                isDesign4={isDesign4}
             />
 
             <main className="canvas-container">
@@ -506,7 +676,11 @@ const Editor: React.FC = () => {
                         alignItems: "center",
                     }}
                 >
-                    <button className="btn-pill btn-pill-icon" onClick={openCameraModal} title="Batch Catalog Generator">
+                    <button
+                        className="btn-pill btn-pill-icon"
+                        onClick={openCameraModal}
+                        title="Batch Catalog Generator"
+                    >
                         <Camera size={20} />
                     </button>
                     <button className="btn-pill primary" onClick={exportSTL}>
@@ -517,7 +691,6 @@ const Editor: React.FC = () => {
                         <Box size={18} />
                         Export 3MF
                     </button>
-
                 </div>
 
                 {state.massCreation?.enabled ? (
@@ -540,6 +713,12 @@ const Editor: React.FC = () => {
                         meshRef={groupRef}
                         onBoundsChange={setBounds}
                     />
+                ) : isDesign4 ? (
+                    <Scene4
+                        state={state}
+                        meshRef={groupRef}
+                        onBoundsChange={setBounds}
+                    />
                 ) : (
                     <Scene
                         state={state}
@@ -550,41 +729,74 @@ const Editor: React.FC = () => {
 
                 {/* Batch Mockup Generator Modal */}
                 {showCameraModal && (
-                    <div className="modal-overlay" onClick={() => !isGenerating && setShowCameraModal(false)}>
-                        <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+                    <div
+                        className="modal-overlay"
+                        onClick={() =>
+                            !isGenerating && setShowCameraModal(false)
+                        }
+                    >
+                        <div
+                            className="modal-container"
+                            onClick={(e) => e.stopPropagation()}
+                        >
                             <div className="modal-header">
-                                <h3 className="modal-title">Batch Catalog Generator</h3>
-                                <button className="modal-close-btn" onClick={() => setShowCameraModal(false)}>
+                                <h3 className="modal-title">
+                                    Batch Catalog Generator
+                                </h3>
+                                <button
+                                    className="modal-close-btn"
+                                    onClick={() => setShowCameraModal(false)}
+                                >
                                     <X size={20} />
                                 </button>
                             </div>
-                            
+
                             <div className="modal-body">
                                 {/* Font Selection Section */}
                                 <div className="modal-section">
                                     <div className="modal-section-title">
-                                        <span>Select Fonts to Generate ({selectedFonts.length})</span>
-                                        <span className="modal-section-link" onClick={() => setSelectedFonts(FONTS.map(f => f.url))}>
+                                        <span>
+                                            Select Fonts to Generate (
+                                            {selectedFonts.length})
+                                        </span>
+                                        <span
+                                            className="modal-section-link"
+                                            onClick={() =>
+                                                setSelectedFonts(
+                                                    FONTS.map((f) => f.url),
+                                                )
+                                            }
+                                        >
                                             Select All
                                         </span>
                                     </div>
                                     <div className="font-selection-grid">
                                         {FONTS.map((font) => {
-                                            const isSelected = selectedFonts.includes(font.url);
+                                            const isSelected =
+                                                selectedFonts.includes(
+                                                    font.url,
+                                                );
                                             return (
-                                                <div 
-                                                    key={font.url} 
-                                                    className={`font-checkbox-card ${isSelected ? 'selected' : ''}`}
-                                                    onClick={() => toggleFontSelection(font.url)}
+                                                <div
+                                                    key={font.url}
+                                                    className={`font-checkbox-card ${isSelected ? "selected" : ""}`}
+                                                    onClick={() =>
+                                                        toggleFontSelection(
+                                                            font.url,
+                                                        )
+                                                    }
                                                 >
-                                                    <input 
-                                                        type="checkbox" 
+                                                    <input
+                                                        type="checkbox"
                                                         checked={isSelected}
                                                         onChange={() => {}} /* Handled by parent div onClick */
                                                     />
-                                                    <span 
-                                                        className="font-checkbox-label" 
-                                                        style={{ fontFamily: font.name }}
+                                                    <span
+                                                        className="font-checkbox-label"
+                                                        style={{
+                                                            fontFamily:
+                                                                font.name,
+                                                        }}
                                                         title={font.name}
                                                     >
                                                         {font.name}
@@ -594,107 +806,197 @@ const Editor: React.FC = () => {
                                         })}
                                     </div>
                                 </div>
-                                
+
                                 {/* Color Combinations Section */}
                                 <div className="modal-section">
                                     <div className="modal-section-title">
-                                        <span>Color Combinations ({colorCombos.length})</span>
+                                        <span>
+                                            Color Combinations (
+                                            {colorCombos.length})
+                                        </span>
                                     </div>
-                                    
+
                                     <div className="combo-list">
                                         {colorCombos.map((combo) => (
-                                            <div key={combo.id} className="combo-item">
+                                            <div
+                                                key={combo.id}
+                                                className="combo-item"
+                                            >
                                                 <div className="combo-info">
-                                                    <span className="combo-name">{combo.name}</span>
+                                                    <span className="combo-name">
+                                                        {combo.name}
+                                                    </span>
                                                     <div className="combo-badges">
-                                                        <div className="color-badge" style={{ backgroundColor: combo.baseColor }}>
-                                                            <span className="color-badge-label">Base: {combo.baseColor}</span>
+                                                        <div
+                                                            className="color-badge"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    combo.baseColor,
+                                                            }}
+                                                        >
+                                                            <span className="color-badge-label">
+                                                                Base:{" "}
+                                                                {
+                                                                    combo.baseColor
+                                                                }
+                                                            </span>
                                                         </div>
-                                                        <div className="color-badge" style={{ backgroundColor: combo.textColor }}>
-                                                            <span className="color-badge-label">Text: {combo.textColor}</span>
+                                                        <div
+                                                            className="color-badge"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    combo.textColor,
+                                                            }}
+                                                        >
+                                                            <span className="color-badge-label">
+                                                                Text:{" "}
+                                                                {
+                                                                    combo.textColor
+                                                                }
+                                                            </span>
                                                         </div>
-                                                        <div className="color-badge" style={{ backgroundColor: combo.borderColor }}>
-                                                            <span className="color-badge-label">Border: {combo.borderColor}</span>
+                                                        <div
+                                                            className="color-badge"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    combo.borderColor,
+                                                            }}
+                                                        >
+                                                            <span className="color-badge-label">
+                                                                Border:{" "}
+                                                                {
+                                                                    combo.borderColor
+                                                                }
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>
-                                                {combo.id !== 'current' && (
-                                                    <button className="action-btn danger" onClick={() => deleteCombo(combo.id)}>
+                                                {combo.id !== "current" && (
+                                                    <button
+                                                        className="action-btn danger"
+                                                        onClick={() =>
+                                                            deleteCombo(
+                                                                combo.id,
+                                                            )
+                                                        }
+                                                    >
                                                         <Trash2 size={15} />
                                                     </button>
                                                 )}
                                             </div>
                                         ))}
                                     </div>
-                                    
+
                                     {/* Custom Color combo form */}
                                     <div className="combo-form">
                                         <div className="combo-form-item">
                                             <label>Combination Name</label>
-                                            <input 
-                                                type="text" 
-                                                placeholder="e.g. Lavender Gold" 
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. Lavender Gold"
                                                 value={customComboName}
-                                                onChange={(e) => setCustomComboName(e.target.value)}
+                                                onChange={(e) =>
+                                                    setCustomComboName(
+                                                        e.target.value,
+                                                    )
+                                                }
                                             />
                                         </div>
                                         <div className="combo-form-item">
                                             <label>Base</label>
-                                            <input 
-                                                type="color" 
+                                            <input
+                                                type="color"
                                                 value={customBaseColor}
-                                                onChange={(e) => setCustomBaseColor(e.target.value)}
+                                                onChange={(e) =>
+                                                    setCustomBaseColor(
+                                                        e.target.value,
+                                                    )
+                                                }
                                             />
                                         </div>
                                         <div className="combo-form-item">
                                             <label>Text</label>
-                                            <input 
-                                                type="color" 
+                                            <input
+                                                type="color"
                                                 value={customTextColor}
-                                                onChange={(e) => setCustomTextColor(e.target.value)}
+                                                onChange={(e) =>
+                                                    setCustomTextColor(
+                                                        e.target.value,
+                                                    )
+                                                }
                                             />
                                         </div>
                                         <div className="combo-form-item">
                                             <label>Border</label>
-                                            <input 
-                                                type="color" 
+                                            <input
+                                                type="color"
                                                 value={customBorderColor}
-                                                onChange={(e) => setCustomBorderColor(e.target.value)}
+                                                onChange={(e) =>
+                                                    setCustomBorderColor(
+                                                        e.target.value,
+                                                    )
+                                                }
                                             />
                                         </div>
-                                        <button className="combo-add-btn" onClick={addCustomCombo}>
-                                            <Plus size={16} style={{ marginRight: '4px' }} /> Add
+                                        <button
+                                            className="combo-add-btn"
+                                            onClick={addCustomCombo}
+                                        >
+                                            <Plus
+                                                size={16}
+                                                style={{
+                                                    marginRight: "4px",
+                                                }}
+                                            />{" "}
+                                            Add
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="modal-footer">
-                                <button className="btn-outline" onClick={() => setShowCameraModal(false)}>
+                                <button
+                                    className="btn-outline"
+                                    onClick={() => setShowCameraModal(false)}
+                                >
                                     Cancel
                                 </button>
-                                <button className="btn-pill primary" onClick={generateCatalog}>
-                                    Generate {selectedFonts.length * colorCombos.length} Previews
+                                <button
+                                    className="btn-pill primary"
+                                    onClick={generateCatalog}
+                                >
+                                    Generate{" "}
+                                    {selectedFonts.length * colorCombos.length}{" "}
+                                    Previews
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
-                
+
                 {/* Processing / Progress Loader Overlay */}
                 {(isGenerating || state.isProcessing) && (
                     <div className="generator-loading-overlay">
                         <div className="loader-spinner"></div>
                         <div className="loader-text">
-                            {state.isProcessing ? "Processing 3D Models" : "Generating Mockup Catalog Pack"}
+                            {state.isProcessing
+                                ? "Processing 3D Models"
+                                : "Generating Mockup Catalog Pack"}
                         </div>
                         {isGenerating && (
                             <div className="loader-progress-bar-bg">
-                                <div className="loader-progress-bar-fill" style={{ width: `${generationPercent}%` }}></div>
+                                <div
+                                    className="loader-progress-bar-fill"
+                                    style={{
+                                        width: `${generationPercent}%`,
+                                    }}
+                                ></div>
                             </div>
                         )}
                         <div className="loader-subtext">
-                            {state.isProcessing ? state.processingMessage : generationProgress}
+                            {state.isProcessing
+                                ? state.processingMessage
+                                : generationProgress}
                         </div>
                     </div>
                 )}
@@ -702,5 +1004,4 @@ const Editor: React.FC = () => {
         </div>
     );
 };
-
 export default Editor;

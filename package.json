@@ -14,6 +14,7 @@
     "@react-three/fiber": "^9.6.1",
     "clipper-lib": "^6.4.2",
     "comlink": "^4.4.2",
+    "firebase": "^12.14.0",
     "jszip": "^3.10.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
@@ -21,7 +22,9 @@
     "react-router-dom": "^7.15.1",
     "three": "^0.184.0",
     "three-bvh-csg": "^0.0.18",
+    "three-csg-ts": "^3.2.0",
     "three-mesh-bvh": "^0.9.10",
+    "three-stdlib": "^2.36.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

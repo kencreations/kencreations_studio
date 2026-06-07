@@ -191,35 +191,43 @@ const Generator: React.FC<SceneProps> = ({
     const baseThickness = state.shape.baseThickness || 3.0;
     const zHeight = bounds?.z || 6.0;
     const floorZ = -baseThickness / 2;
-    
+
     const cutoffZ = React.useMemo(() => {
         if (activeLayer === undefined || totalLayers === undefined) return 0;
         return floorZ + (activeLayer / totalLayers) * zHeight;
     }, [activeLayer, totalLayers, floorZ, zHeight]);
 
     const clippingPlanes = React.useMemo(() => {
-        if (activeLayer === undefined || totalLayers === undefined || activeLayer >= totalLayers) {
+        if (
+            activeLayer === undefined ||
+            totalLayers === undefined ||
+            activeLayer >= totalLayers
+        ) {
             return [];
         }
         return [new THREE.Plane(new THREE.Vector3(0, 0, -1), cutoffZ)];
     }, [activeLayer, totalLayers, cutoffZ]);
 
     const ghostClippingPlanes = React.useMemo(() => {
-        if (activeLayer === undefined || totalLayers === undefined || activeLayer >= totalLayers) {
+        if (
+            activeLayer === undefined ||
+            totalLayers === undefined ||
+            activeLayer >= totalLayers
+        ) {
             return [];
         }
         return [new THREE.Plane(new THREE.Vector3(0, 0, 1), -cutoffZ)];
     }, [activeLayer, totalLayers, cutoffZ]);
 
     const striatedTexture = React.useMemo(() => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = 1;
         canvas.height = 32;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (!ctx) return null;
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, 1, 26);
-        ctx.fillStyle = '#cbd5e1';
+        ctx.fillStyle = "#cbd5e1";
         ctx.fillRect(0, 26, 1, 6);
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
@@ -229,20 +237,21 @@ const Generator: React.FC<SceneProps> = ({
     }, []);
 
     const toolpathTexture = React.useMemo(() => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = 512;
         canvas.height = 512;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (!ctx) return null;
-        ctx.fillStyle = '#1e293b';
+        ctx.fillStyle = "#1e293b";
         ctx.fillRect(0, 0, 512, 512);
-        
-        const progressVal = slicerPathProgress !== undefined ? slicerPathProgress / 100 : 1.0;
-        
+
+        const progressVal =
+            slicerPathProgress !== undefined ? slicerPathProgress / 100 : 1.0;
+
         // 1. Outer Red Perimeter (drawn between 0.0 and 0.15 progress)
         if (progressVal > 0) {
             const p1 = Math.min(1.0, progressVal / 0.15);
-            ctx.strokeStyle = '#ef4444';
+            ctx.strokeStyle = "#ef4444";
             ctx.lineWidth = 10;
             if (p1 >= 1.0) {
                 ctx.strokeRect(16, 16, 480, 480);
@@ -283,13 +292,13 @@ const Generator: React.FC<SceneProps> = ({
                 ctx.stroke();
             }
         }
-        
+
         // 2. Inner Green Perimeters (drawn between 0.15 and 0.30 progress)
         if (progressVal > 0.15) {
             const p2 = Math.min(1.0, (progressVal - 0.15) / 0.15);
-            ctx.strokeStyle = '#10b981';
+            ctx.strokeStyle = "#10b981";
             ctx.lineWidth = 8;
-            
+
             if (p2 >= 0.5) {
                 ctx.strokeRect(28, 28, 456, 456);
             } else {
@@ -298,13 +307,37 @@ const Generator: React.FC<SceneProps> = ({
                 const drawLen = totalLen * (p2 * 2);
                 ctx.moveTo(28, 28);
                 let cur = 0;
-                if (cur + 456 <= drawLen) { ctx.lineTo(484, 28); cur += 456; } else { ctx.lineTo(28 + (drawLen - cur), 28); cur = drawLen; }
-                if (cur < drawLen) { if (cur + 456 <= drawLen) { ctx.lineTo(484, 484); cur += 456; } else { ctx.lineTo(484, 28 + (drawLen - cur)); cur = drawLen; } }
-                if (cur < drawLen) { if (cur + 456 <= drawLen) { ctx.lineTo(28, 484); cur += 456; } else { ctx.lineTo(484 - (drawLen - cur), 484); cur = drawLen; } }
-                if (cur < drawLen) { ctx.lineTo(28, 484 - (drawLen - cur)); }
+                if (cur + 456 <= drawLen) {
+                    ctx.lineTo(484, 28);
+                    cur += 456;
+                } else {
+                    ctx.lineTo(28 + (drawLen - cur), 28);
+                    cur = drawLen;
+                }
+                if (cur < drawLen) {
+                    if (cur + 456 <= drawLen) {
+                        ctx.lineTo(484, 484);
+                        cur += 456;
+                    } else {
+                        ctx.lineTo(484, 28 + (drawLen - cur));
+                        cur = drawLen;
+                    }
+                }
+                if (cur < drawLen) {
+                    if (cur + 456 <= drawLen) {
+                        ctx.lineTo(28, 484);
+                        cur += 456;
+                    } else {
+                        ctx.lineTo(484 - (drawLen - cur), 484);
+                        cur = drawLen;
+                    }
+                }
+                if (cur < drawLen) {
+                    ctx.lineTo(28, 484 - (drawLen - cur));
+                }
                 ctx.stroke();
             }
-            
+
             if (p2 >= 1.0) {
                 ctx.strokeRect(36, 36, 440, 440);
             } else if (p2 > 0.5) {
@@ -314,29 +347,54 @@ const Generator: React.FC<SceneProps> = ({
                 const drawLen = totalLen * subP;
                 ctx.moveTo(36, 36);
                 let cur = 0;
-                if (cur + 440 <= drawLen) { ctx.lineTo(476, 36); cur += 440; } else { ctx.lineTo(36 + (drawLen - cur), 36); cur = drawLen; }
-                if (cur < drawLen) { if (cur + 440 <= drawLen) { ctx.lineTo(476, 476); cur += 440; } else { ctx.lineTo(476, 36 + (drawLen - cur)); cur = drawLen; } }
-                if (cur < drawLen) { if (cur + 440 <= drawLen) { ctx.lineTo(36, 476); cur += 440; } else { ctx.lineTo(476 - (drawLen - cur), 476); cur = drawLen; } }
-                if (cur < drawLen) { ctx.lineTo(36, 476 - (drawLen - cur)); }
+                if (cur + 440 <= drawLen) {
+                    ctx.lineTo(476, 36);
+                    cur += 440;
+                } else {
+                    ctx.lineTo(36 + (drawLen - cur), 36);
+                    cur = drawLen;
+                }
+                if (cur < drawLen) {
+                    if (cur + 440 <= drawLen) {
+                        ctx.lineTo(476, 476);
+                        cur += 440;
+                    } else {
+                        ctx.lineTo(476, 36 + (drawLen - cur));
+                        cur = drawLen;
+                    }
+                }
+                if (cur < drawLen) {
+                    if (cur + 440 <= drawLen) {
+                        ctx.lineTo(36, 476);
+                        cur += 440;
+                    } else {
+                        ctx.lineTo(476 - (drawLen - cur), 476);
+                        cur = drawLen;
+                    }
+                }
+                if (cur < drawLen) {
+                    ctx.lineTo(36, 476 - (drawLen - cur));
+                }
                 ctx.stroke();
             }
         }
-        
+
         // 3. Orange Infill (drawn between 0.30 and 1.0 progress)
-        if (progressVal > 0.30) {
-            const infillP = Math.min(1.0, (progressVal - 0.30) / 0.70);
-            ctx.strokeStyle = '#f59e0b';
+        if (progressVal > 0.3) {
+            const infillP = Math.min(1.0, (progressVal - 0.3) / 0.7);
+            ctx.strokeStyle = "#f59e0b";
             ctx.lineWidth = 4;
-            
-            const infillPattern = state.slicerSettings?.infillPattern || 'Gyroid';
-            if (infillPattern === 'Gyroid') {
+
+            const infillPattern =
+                state.slicerSettings?.infillPattern || "Gyroid";
+            if (infillPattern === "Gyroid") {
                 const yLines = [];
                 for (let y = 50; y < 460; y += 40) {
                     yLines.push(y);
                 }
                 const totalInfillPoints = yLines.length * 28;
                 const drawPointsCount = Math.ceil(totalInfillPoints * infillP);
-                
+
                 let currentPointIdx = 0;
                 for (let y of yLines) {
                     if (currentPointIdx >= drawPointsCount) break;
@@ -344,7 +402,7 @@ const Generator: React.FC<SceneProps> = ({
                     let isFirst = true;
                     for (let x = 50; x <= 455; x += 15) {
                         if (currentPointIdx >= drawPointsCount) break;
-                        const wave = Math.sin((x / 30) + (y / 30)) * 15;
+                        const wave = Math.sin(x / 30 + y / 30) * 15;
                         if (isFirst) {
                             ctx.moveTo(x, y + wave);
                             isFirst = false;
@@ -358,14 +416,14 @@ const Generator: React.FC<SceneProps> = ({
             } else {
                 const gridLines = [];
                 for (let i = 50; i < 460; i += 50) {
-                    gridLines.push({ type: 'v', val: i });
-                    gridLines.push({ type: 'h', val: i });
+                    gridLines.push({ type: "v", val: i });
+                    gridLines.push({ type: "h", val: i });
                 }
                 const drawCount = Math.ceil(gridLines.length * infillP);
                 for (let idx = 0; idx < drawCount; idx++) {
                     const line = gridLines[idx];
                     ctx.beginPath();
-                    if (line.type === 'v') {
+                    if (line.type === "v") {
                         ctx.moveTo(line.val, 50);
                         ctx.lineTo(line.val, 460);
                     } else {
@@ -376,7 +434,7 @@ const Generator: React.FC<SceneProps> = ({
                 }
             }
         }
-        
+
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
@@ -386,7 +444,7 @@ const Generator: React.FC<SceneProps> = ({
 
     const bw = bounds?.x || state.shape.width || 120;
     const bh = bounds?.y || state.shape.height || 60;
-    
+
     const laceHoleType = state.laceHole.type || "default";
     const hasLoopTab = state.laceHole.enabled && laceHoleType === "loop";
     const tabW = Math.max(state.laceHole.width + 5, 12);
@@ -403,7 +461,15 @@ const Generator: React.FC<SceneProps> = ({
             skipTopWave,
             excludeTabWidth,
         );
-    }, [bw, bh, state.shape.cornerRadius, state.shape.amplitude, state.shape.wavelength, skipTopWave, excludeTabWidth]);
+    }, [
+        bw,
+        bh,
+        state.shape.cornerRadius,
+        state.shape.amplitude,
+        state.shape.wavelength,
+        skipTopWave,
+        excludeTabWidth,
+    ]);
 
     const surfaceEpsilon = 0.08;
     const [textGeos, setTextGeos] = useState<
@@ -470,6 +536,9 @@ const Generator: React.FC<SceneProps> = ({
                     th: number;
                 }[] = [];
 
+                // NEW: Define max width for auto-scaling
+                const maxAllowedWidth = s.shape.width - s.shape.padding * 2;
+
                 for (const line of s.lines) {
                     if (!line.text.trim()) continue;
                     const geo = createTextGeometryWithSpacing(
@@ -480,9 +549,21 @@ const Generator: React.FC<SceneProps> = ({
                         line.letterSpacing || 0,
                     );
                     geo.computeBoundingBox();
-                    const bounds = geo.boundingBox!;
-                    const tw = bounds.max.x - bounds.min.x;
-                    const th = bounds.max.y - bounds.min.y;
+                    let bounds = geo.boundingBox!;
+                    let tw = bounds.max.x - bounds.min.x;
+                    let th = bounds.max.y - bounds.min.y;
+
+                    // --- AUTO-SCALE LOGIC FOR MASS CREATION ---
+                    if (s.massCreation?.enabled && tw > maxAllowedWidth) {
+                        const scaleFactor = maxAllowedWidth / tw;
+                        geo.scale(scaleFactor, scaleFactor, 1);
+                        geo.computeBoundingBox(); // Recompute new bounds
+                        bounds = geo.boundingBox!;
+                        tw = bounds.max.x - bounds.min.x;
+                        th = bounds.max.y - bounds.min.y;
+                    }
+                    // ------------------------------------------
+
                     maxTextWidth = Math.max(maxTextWidth, tw);
                     lineGeometries.push({
                         line,
@@ -504,7 +585,8 @@ const Generator: React.FC<SceneProps> = ({
                 let bh = s.shape.height;
                 const holeSpace = s.laceHole.topMargin + s.laceHole.height;
 
-                if (s.shape.autoSize) {
+                // --- PREVENT RESIZING DURING MASS CREATION ---
+                if (s.shape.autoSize && !s.massCreation?.enabled) {
                     bw = maxTextWidth + s.shape.padding * 2;
                     bh = totalTextHeight + s.shape.padding * 2;
 
@@ -543,7 +625,7 @@ const Generator: React.FC<SceneProps> = ({
 
                 // 2. Base Plate & Border
 
-                 const outerShape = createBaseShape(
+                const outerShape = createBaseShape(
                     bw,
                     bh,
                     s.shape.cornerRadius,
@@ -566,7 +648,10 @@ const Generator: React.FC<SceneProps> = ({
                 let borderBrush: Brush | null = null;
                 if (s.shape.topBorder > 0) {
                     // Border: Extruded starting exactly from the top of the Base Plate! (Layer 2 Color)
-                    const bWidth = s.shape.borderWidth !== undefined ? s.shape.borderWidth : 2.0;
+                    const bWidth =
+                        s.shape.borderWidth !== undefined
+                            ? s.shape.borderWidth
+                            : 2.0;
                     const innerW = Math.max(1, bw - bWidth * 2);
                     const innerH = Math.max(1, bh - bWidth * 2);
                     const innerR = Math.max(0, s.shape.cornerRadius - bWidth);
@@ -839,37 +924,31 @@ const Generator: React.FC<SceneProps> = ({
                     )}
 
                     {/* 2. Flat Solid Caps on Slicing cutoffZ Plane */}
-                    {activeLayer !== undefined && activeLayer < totalLayers && outerShape && (
-                        <mesh position={[0, 0, cutoffZ]} rotation={[0, 0, 0]} receiveShadow>
-                            <shapeGeometry args={[outerShape]} />
-                            <meshStandardMaterial
-                                map={toolpathTexture}
-                                roughness={0.4}
-                                metalness={0.1}
-                                side={THREE.DoubleSide}
-                            />
-                        </mesh>
-                    )}
+                    {activeLayer !== undefined &&
+                        activeLayer < totalLayers &&
+                        outerShape && (
+                            <mesh
+                                position={[0, 0, cutoffZ]}
+                                rotation={[0, 0, 0]}
+                                receiveShadow
+                            >
+                                <shapeGeometry args={[outerShape]} />
+                                <meshStandardMaterial
+                                    map={toolpathTexture}
+                                    roughness={0.4}
+                                    metalness={0.1}
+                                    side={THREE.DoubleSide}
+                                />
+                            </mesh>
+                        )}
 
                     {/* 3. Ghosted Upper Part (Translucent silhouette above cutoffZ) */}
-                    {baseGeo && activeLayer !== undefined && activeLayer < totalLayers && (
-                        <mesh geometry={baseGeo} name="base-ghost">
-                            <meshStandardMaterial
-                                color={debouncedState.baseColor}
-                                roughness={0.5}
-                                transparent={true}
-                                opacity={0.12}
-                                depthWrite={false}
-                                side={THREE.DoubleSide}
-                                clippingPlanes={ghostClippingPlanes}
-                            />
-                        </mesh>
-                    )}
-                    {textGeos.map((tg, i) => (
-                        activeLayer !== undefined && activeLayer < totalLayers && (
-                            <mesh key={`txt-ghost-${i}`} geometry={tg.g} name="text-ghost">
+                    {baseGeo &&
+                        activeLayer !== undefined &&
+                        activeLayer < totalLayers && (
+                            <mesh geometry={baseGeo} name="base-ghost">
                                 <meshStandardMaterial
-                                    color={tg.color}
+                                    color={debouncedState.baseColor}
                                     roughness={0.5}
                                     transparent={true}
                                     opacity={0.12}
@@ -878,21 +957,43 @@ const Generator: React.FC<SceneProps> = ({
                                     clippingPlanes={ghostClippingPlanes}
                                 />
                             </mesh>
-                        )
-                    ))}
-                    {borderGeo && activeLayer !== undefined && activeLayer < totalLayers && (
-                        <mesh geometry={borderGeo} name="border-ghost">
-                            <meshStandardMaterial
-                                color={debouncedState.borderColor}
-                                roughness={0.5}
-                                transparent={true}
-                                opacity={0.12}
-                                depthWrite={false}
-                                side={THREE.DoubleSide}
-                                clippingPlanes={ghostClippingPlanes}
-                            />
-                        </mesh>
+                        )}
+                    {textGeos.map(
+                        (tg, i) =>
+                            activeLayer !== undefined &&
+                            activeLayer < totalLayers && (
+                                <mesh
+                                    key={`txt-ghost-${i}`}
+                                    geometry={tg.g}
+                                    name="text-ghost"
+                                >
+                                    <meshStandardMaterial
+                                        color={tg.color}
+                                        roughness={0.5}
+                                        transparent={true}
+                                        opacity={0.12}
+                                        depthWrite={false}
+                                        side={THREE.DoubleSide}
+                                        clippingPlanes={ghostClippingPlanes}
+                                    />
+                                </mesh>
+                            ),
                     )}
+                    {borderGeo &&
+                        activeLayer !== undefined &&
+                        activeLayer < totalLayers && (
+                            <mesh geometry={borderGeo} name="border-ghost">
+                                <meshStandardMaterial
+                                    color={debouncedState.borderColor}
+                                    roughness={0.5}
+                                    transparent={true}
+                                    opacity={0.12}
+                                    depthWrite={false}
+                                    side={THREE.DoubleSide}
+                                    clippingPlanes={ghostClippingPlanes}
+                                />
+                            </mesh>
+                        )}
                 </group>
             </Center>
         </>
@@ -919,14 +1020,14 @@ const PrintNozzle: React.FC<NozzleProps> = ({
     const zHeight = bounds?.z || 4.5;
     const width = bounds?.x || 75;
     const height = bounds?.y || 40;
-    
+
     const nozzleZ = floorZ + (activeLayer / totalLayers) * zHeight;
     const t = (slicerPathProgress || 100) / 100;
-    
+
     // FDM Toolpath Path Generation: 30% outer shell, 70% infill raster
     let nozzleX = 0;
     let nozzleY = 0;
-    
+
     if (t < 0.3) {
         const perimeterT = t / 0.3;
         const angle = perimeterT * Math.PI * 2;
@@ -937,12 +1038,16 @@ const PrintNozzle: React.FC<NozzleProps> = ({
         const numScans = 10;
         const scanIndex = Math.floor(infillT * numScans);
         const scanLineT = (infillT * numScans) % 1;
-        const currentX = -width / 2 + (scanIndex / Math.max(1, numScans - 1)) * width;
+        const currentX =
+            -width / 2 + (scanIndex / Math.max(1, numScans - 1)) * width;
         const startY = -height / 2;
         const endY = height / 2;
-        
+
         nozzleX = currentX;
-        nozzleY = scanIndex % 2 === 0 ? startY + scanLineT * (endY - startY) : endY - scanLineT * (endY - startY);
+        nozzleY =
+            scanIndex % 2 === 0
+                ? startY + scanLineT * (endY - startY)
+                : endY - scanLineT * (endY - startY);
     }
 
     return (
@@ -950,12 +1055,22 @@ const PrintNozzle: React.FC<NozzleProps> = ({
             {/* The heated print head tip (cone) */}
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 8]}>
                 <coneGeometry args={[3, 16, 16]} />
-                <meshStandardMaterial color="#475569" roughness={0.5} metalness={0.8} />
+                <meshStandardMaterial
+                    color="#475569"
+                    roughness={0.5}
+                    metalness={0.8}
+                />
             </mesh>
             {/* Glowing brass tip */}
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 0.5]}>
                 <coneGeometry args={[0.8, 1, 12]} />
-                <meshStandardMaterial color="#ca8a04" roughness={0.2} metalness={0.9} emissive="#caca24" emissiveIntensity={0.6} />
+                <meshStandardMaterial
+                    color="#ca8a04"
+                    roughness={0.2}
+                    metalness={0.9}
+                    emissive="#caca24"
+                    emissiveIntensity={0.6}
+                />
             </mesh>
             {/* Extremely hot heated filament node */}
             <mesh position={[0, 0, 0]}>
@@ -972,7 +1087,11 @@ const Scene: React.FC<SceneProps> = (props) => {
     const floorZ = -props.state.shape.baseThickness / 2;
 
     return (
-        <Canvas shadows camera={{ position: [0, -60, 60], fov: 45 }} gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }}>
+        <Canvas
+            shadows
+            camera={{ position: [0, -60, 60], fov: 45 }}
+            gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }}
+        >
             <ambientLight intensity={0.6} />
             <directionalLight
                 position={[10, -10, 30]}
@@ -984,15 +1103,16 @@ const Scene: React.FC<SceneProps> = (props) => {
 
             <Generator {...props} />
 
-            {props.activeLayer !== undefined && props.totalLayers !== undefined && (
-                <PrintNozzle
-                    bounds={props.bounds}
-                    activeLayer={props.activeLayer}
-                    totalLayers={props.totalLayers}
-                    slicerPathProgress={props.slicerPathProgress}
-                    floorZ={floorZ}
-                />
-            )}
+            {props.activeLayer !== undefined &&
+                props.totalLayers !== undefined && (
+                    <PrintNozzle
+                        bounds={props.bounds}
+                        activeLayer={props.activeLayer}
+                        totalLayers={props.totalLayers}
+                        slicerPathProgress={props.slicerPathProgress}
+                        floorZ={floorZ}
+                    />
+                )}
 
             {/* Floor to receive shadow, placed slightly below the grid to avoid z-fighting */}
             <mesh position={[0, 0, floorZ - 0.05]} receiveShadow>
@@ -1021,6 +1141,3 @@ const Scene: React.FC<SceneProps> = (props) => {
 
 export { Generator };
 export default Scene;
-
-
-

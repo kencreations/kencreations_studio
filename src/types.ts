@@ -34,6 +34,7 @@ export interface AppState {
         type: "default" | "loop";
     };
     shape: {
+        modelType?: number;
         autoSize: boolean;
         padding: number;
         width: number;

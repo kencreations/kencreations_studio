@@ -22,6 +22,11 @@ import SceneClicker from "../components/SceneClicker";
 import type { ClickerState } from "../components/SceneClicker";
 import { exportClickerSTL, exportClicker3MF } from "../utils/exportClicker";
 import * as THREE from "three";
+import { useLocation } from "react-router-dom";
+import { auth, db } from "../firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
+import { AuthOverlay } from "../components/AuthOverlay";
+import { RAW_TOOLS } from "./Home";
 
 const PRESETS = [
     { name: "Bamboo Green", hex: "#10b981" },
@@ -45,6 +50,9 @@ const FidgetClickerEditor: React.FC = () => {
         style: "elevated",
         customStlUrl: null,
         customStlName: null,
+        customSvgString: null, // NEW
+        customSvgName: null,   // NEW
+        svgScale: 0.2,         // NEW
         baseColor: "#06b6d4",
         hookColor: "#10b981",
         hookEnabled: true,
@@ -70,6 +78,38 @@ const FidgetClickerEditor: React.FC = () => {
         logoCoverRotY: 0,
         logoCoverRotZ: 0,
     });
+
+    const location = useLocation();
+    const [isAuthorized, setIsAuthorized] = useState(false);
+    
+    const isFreeFeature = React.useMemo(() => {
+        const tool = RAW_TOOLS.find((t) => t.path === location.pathname);
+        if (!tool) return true;
+        if (tool.priceHint && tool.priceHint.toLowerCase() !== "free") {
+            return false;
+        }
+        return true;
+    }, [location.pathname]);
+
+    useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                setIsAuthorized(false);
+                return;
+            }
+            if (isFreeFeature) {
+                setIsAuthorized(true);
+            } else {
+                const snap = await getDoc(doc(db, "users", user.uid));
+                if (snap.exists() && snap.data()?.isPaid) {
+                    setIsAuthorized(true);
+                } else {
+                    setIsAuthorized(false);
+                }
+            }
+        });
+        return () => unsubscribe();
+    }, [isFreeFeature]);
 
     const [activeTab, setActiveTab] = useState<"style" | "hook" | "color">(
         "style",
@@ -166,6 +206,24 @@ const FidgetClickerEditor: React.FC = () => {
         }, 100);
     };
 
+   const svgFileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleSvgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                setState((prev) => ({
+                    ...prev,
+                    style: "svg",
+                    customSvgString: event.target?.result as string,
+                    customSvgName: file.name,
+                }));
+            };
+            reader.readAsText(file); // SVGs must be read as raw text XML
+        }
+    };
+
     const handleCustomStlUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -176,6 +234,8 @@ const FidgetClickerEditor: React.FC = () => {
                 customStlUrl: url,
                 customStlName: file.name,
             }));
+            // Reset input value to allow uploading the same file again
+            e.target.value = "";
         }
     };
 
@@ -205,6 +265,13 @@ const FidgetClickerEditor: React.FC = () => {
                     "radial-gradient(circle at center, #111827 0%, #030712 100%)",
                 color: "#f3f4f6",
             }}>
+            {!isAuthorized && (
+                <AuthOverlay
+                    onUnlock={() => setIsAuthorized(true)}
+                    isFreeFeature={isFreeFeature}
+                />
+            )}
+            
             {/* 3D Canvas */}
             <div className="canvas-container">
                 <SceneClicker

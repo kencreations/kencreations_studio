@@ -1,61 +1,438 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Layers, FileText, Settings, Heart, Box, Circle, Type, PenTool } from 'lucide-react';
+import React, { useMemo } from "react";
+import { Link } from "react-router-dom";
+import {
+    Box,
+    Sparkles,
+    Fingerprint,
+    PenTool,
+    LayoutGrid,
+    ChevronRight,
+    AlertTriangle,
+    ShieldCheck,
+    Zap,
+} from "lucide-react";
+
+export interface ToolItem {
+    ref: string;
+    name: string;
+    description: string;
+    path: string;
+    icon: React.ReactNode;
+    color: string;
+    status: "stable" | "beta" | "maintenance" | "upcoming";
+    priceHint?: string; // Optional price metadata for premium features
+}
+
+export const RAW_TOOLS: ToolItem[] = [
+    {
+        ref: "001",
+        name: "Classic ID Tag",
+        description:
+            "Standard customizable 3D name tag template with dynamic text padding adjustment rules.",
+        path: "/editor/id-name-tag",
+        icon: <Fingerprint size={24} strokeWidth={1.5} />,
+        color: "#06b6d4",
+        status: "stable",
+        priceHint: "Free",
+    },
+    {
+        ref: "002",
+        name: "ID Tag V2",
+        description:
+            "Streamlined modern name tag incorporating a custom dual-material overlay border frame configuration.",
+        path: "/editor/id-name-tag-2",
+        icon: <LayoutGrid size={24} strokeWidth={1.5} />,
+        color: "#10b981",
+        status: "stable",
+        priceHint: "$1.99 / export",
+    },
+    {
+        ref: "003",
+        name: "Rounded ID Tag",
+        description:
+            "Dynamic typographic configurations matched over parametric corner configurations for modern looks.",
+        path: "/editor/id-name-tag-3",
+        icon: <Box size={24} strokeWidth={1.5} />,
+        color: "#8b5cf6",
+        status: "maintenance",
+        priceHint: "Pro Plan",
+    },
+    {
+        ref: "003-b",
+        name: "Creative ID Tag",
+        description:
+            "Dynamic models with 3 distinct organic shapes: standard rounded, cloud-like squiggly edge, and wavy scalloped borders with a custom trapezoidal handle.",
+        path: "/editor/id-name-tag-4",
+        icon: <Sparkles size={24} strokeWidth={1.5} />,
+        color: "#10b981",
+        status: "stable",
+    },
+    {
+        ref: "004",
+        name: "Fidget Clicker",
+        description:
+            "Parametric modular clicker generator with integrated mechanical keyboard switch housings and SVG extruders.",
+        path: "/editor/fidget-clicker",
+        icon: <Sparkles size={24} strokeWidth={1.5} />,
+        color: "#f59e0b",
+        status: "stable",
+        priceHint: "$2.49 / design",
+    },
+    {
+        ref: "005",
+        name: "Pencil Topper",
+        description:
+            "Personalized structural typographic caps fitted perfectly onto standard office pencil dimensions.",
+        path: "/editor/pencil-topper",
+        icon: <PenTool size={24} strokeWidth={1.5} />,
+        color: "#ec4899",
+        status: "stable",
+    },
+];
+
+const STATUS_CONFIG = {
+    stable: {
+        label: "Stable",
+        bg: "rgba(16, 185, 129, 0.08)",
+        text: "#10b981",
+        border: "rgba(16, 185, 129, 0.2)",
+    },
+    beta: {
+        label: "Beta",
+        bg: "rgba(245, 158, 11, 0.08)",
+        text: "#f59e0b",
+        border: "rgba(245, 158, 11, 0.2)",
+    },
+    maintenance: {
+        label: "Maintenance",
+        bg: "rgba(239, 68, 68, 0.08)",
+        text: "#ef4444",
+        border: "rgba(239, 68, 68, 0.2)",
+    },
+    upcoming: {
+        label: "Coming Soon",
+        bg: "rgba(107, 114, 128, 0.08)",
+        text: "#9ca3af",
+        border: "rgba(107, 114, 128, 0.2)",
+    },
+};
 
 const Home: React.FC = () => {
-  const templates = [
-    { id: 'fidget-clicker', name: 'Fidget Clicker Creator', desc: 'Customize fidget clicker bases with modular hooks, revisions, and individual coloring.', icon: <Box size={48} /> },
-    { id: 'canvas-studio', name: 'Canvas Studio', desc: 'Design from scratch with full creative control.', icon: <Box size={48} /> },
-    { id: 'pencil-topper', name: 'Pencil Name Topper', desc: 'Custom pill-shaped pencil holder name tag.', icon: <PenTool size={48} /> },
-    { id: 'basic-name-tag', name: 'Basic Name Tag', desc: 'Simple, elegant name tag for any occasion.', icon: <Type size={48} /> },
-    { id: 'id-name-tag', name: 'ID Name Tag', desc: 'Professional ID tag with subtext support.', icon: <FileText size={48} /> },
-    { id: 'id-name-tag-2', name: 'ID Name Tag (Design 2)', desc: 'Hello My Name Is style tag with multi-layer text.', icon: <FileText size={48} /> },
-    { id: 'id-name-tag-3', name: 'ID Name Tag (Design 3)', desc: 'Kurt style name tag with a left circular grommet keyhole and raised outer border.', icon: <FileText size={48} /> },
-    { id: 'cake-topper', name: 'Cake Topper', desc: 'Custom text topper for cakes and celebrations.', icon: <Layers size={48} /> },
-    { id: 'keycap-maker', name: 'Keycap Set Maker', desc: 'Design your own custom mechanical keycaps.', icon: <Circle size={48} /> },
-    { id: 'pet-tag', name: 'Pet Tag', desc: 'Durable and personalized tags for your pets.', icon: <Heart size={48} /> }
-  ];
+    // Deduplicate array using a reliable Map index grouped on ref properties
+    const uniqueTools = useMemo(() => {
+        const deduplicationMap = new Map(
+            RAW_TOOLS.map((item) => [item.ref, item]),
+        );
+        return Array.from(deduplicationMap.values());
+    }, []);
 
-  return (
-    <div className="home-container">
-      <header className="home-header">
-        <Link to="/" className="home-brand">
-          <Layers className="brand-icon" size={28} color="var(--accent-color)" />
-          Print Studio
-        </Link>
-        <nav className="home-nav">
-          <a href="#" className="home-nav-link">Claim Free Downloads</a>
-          {/* Pricing removed as per user request */}
-          <a href="#" className="home-nav-link">Sign In</a>
-          <a href="#" className="btn-outline">
-            <Settings size={16} style={{display:'inline', verticalAlign:'middle', marginRight:'6px'}}/>
-            Settings
-          </a>
-        </nav>
-      </header>
+    return (
+        <div
+            style={{
+                minHeight: "100vh",
+                backgroundColor: "#030712",
+                color: "#f9fafb",
+                fontFamily:
+                    "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                padding: "80px 24px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+            }}
+        >
+            {/* Header Content Frame */}
+            <div
+                style={{
+                    textAlign: "center",
+                    maxWidth: "640px",
+                    marginBottom: "72px",
+                }}
+            >
+                <div
+                    style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        background: "rgba(255, 255, 255, 0.03)",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        padding: "6px 14px",
+                        borderRadius: "100px",
+                        fontSize: "0.8rem",
+                        color: "#9ca3af",
+                        fontWeight: 500,
+                        marginBottom: "24px",
+                    }}
+                >
+                    <Zap size={14} color="#eab308" /> Studio Cloud Platform
+                    Engine Active
+                </div>
+                <h1
+                    style={{
+                        fontSize: "3.5rem",
+                        fontWeight: 800,
+                        letterSpacing: "-0.03em",
+                        margin: "0 0 16px 0",
+                        background:
+                            "linear-gradient(135deg, #ffffff 30%, #9ca3af 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                    }}
+                >
+                    KenCreations Studio
+                </h1>
+                <p
+                    style={{
+                        fontSize: "1.1rem",
+                        color: "#9ca3af",
+                        lineHeight: 1.6,
+                        margin: 0,
+                        fontWeight: 400,
+                    }}
+                >
+                    Professional toolsets for dynamic 3D model generation.
+                    Adjust specifications, evaluate slices, and download
+                    manufacturing-grade fabrication geometries directly.
+                </p>
+            </div>
 
-      <main className="home-main">
-        <section className="home-hero">
-          <h1>What will you create today?</h1>
-          <p>Create personalized 3D printables. Design keychains, toppers, and more—preview and export for 3D printing directly from your browser.</p>
-        </section>
+            {/* Grid Framework Section */}
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                    gap: "24px",
+                    width: "100%",
+                    maxWidth: "1100px",
+                }}
+            >
+                {uniqueTools.map((tool) => {
+                    const status = STATUS_CONFIG[tool.status];
+                    const isDisabled =
+                        tool.status === "maintenance" ||
+                        tool.status === "upcoming";
 
-        <section className="templates-grid">
-          {templates.map(tpl => (
-            <Link to={tpl.id === 'fidget-clicker' ? '/editor/fidget-clicker' : `/editor/${tpl.id}`} key={tpl.id} className="template-card">
-              <div className="template-card-image">
-                {tpl.icon}
-              </div>
-              <div className="template-card-content">
-                <h3 className="template-card-title">{tpl.name}</h3>
-                <p className="template-card-desc">{tpl.desc}</p>
-              </div>
-            </Link>
-          ))}
-        </section>
-      </main>
-    </div>
-  );
+                    const CardInnerContent = (
+                        <div
+                            style={{
+                                background: "rgba(255, 255, 255, 0.01)",
+                                border: "1px solid rgba(255, 255, 255, 0.05)",
+                                borderRadius: "20px",
+                                padding: "28px",
+                                height: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                                transition:
+                                    "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                position: "relative",
+                                opacity: isDisabled ? 0.6 : 1,
+                                cursor: isDisabled ? "not-allowed" : "pointer",
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!isDisabled) {
+                                    e.currentTarget.style.background =
+                                        "rgba(255, 255, 255, 0.03)";
+                                    e.currentTarget.style.border = `1px solid ${tool.color}40`;
+                                    e.currentTarget.style.transform =
+                                        "translateY(-4px)";
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (!isDisabled) {
+                                    e.currentTarget.style.background =
+                                        "rgba(255, 255, 255, 0.01)";
+                                    e.currentTarget.style.border =
+                                        "1px solid rgba(255, 255, 255, 0.05)";
+                                    e.currentTarget.style.transform =
+                                        "translateY(0)";
+                                }
+                            }}
+                        >
+                            {/* Card Top Row Badges */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    marginBottom: "24px",
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        background: `${tool.color}10`,
+                                        color: tool.color,
+                                        width: "48px",
+                                        height: "48px",
+                                        borderRadius: "14px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                    }}
+                                >
+                                    {tool.icon}
+                                </div>
+
+                                {/* Status Chip Element */}
+                                <div
+                                    style={{
+                                        backgroundColor: status.bg,
+                                        color: status.text,
+                                        border: `1px solid ${status.border}`,
+                                        padding: "4px 10px",
+                                        borderRadius: "6px",
+                                        fontSize: "0.72rem",
+                                        fontWeight: 600,
+                                        letterSpacing: "0.02em",
+                                    }}
+                                >
+                                    {status.label}
+                                </div>
+                            </div>
+
+                            {/* Title & Monetization Hint Frame */}
+                            <div
+                                style={{
+                                    display: "flex",
+                                    alignItems: "baseline",
+                                    gap: "10px",
+                                    margin: "0 0 8px 0",
+                                }}
+                            >
+                                <h3
+                                    style={{
+                                        margin: 0,
+                                        fontSize: "1.2rem",
+                                        fontWeight: 600,
+                                        color: "#f3f4f6",
+                                    }}
+                                >
+                                    {tool.name}
+                                </h3>
+                                {tool.priceHint && !isDisabled && (
+                                    <span
+                                        style={{
+                                            fontSize: "0.75rem",
+                                            color:
+                                                tool.priceHint === "Free"
+                                                    ? "#10b981"
+                                                    : "#06b6d4",
+                                            background:
+                                                tool.priceHint === "Free"
+                                                    ? "rgba(16,185,129,0.06)"
+                                                    : "rgba(6,182,212,0.06)",
+                                            padding: "1px 6px",
+                                            borderRadius: "4px",
+                                            fontWeight: 500,
+                                        }}
+                                    >
+                                        {tool.priceHint}
+                                    </span>
+                                )}
+                            </div>
+
+                            <p
+                                style={{
+                                    margin: 0,
+                                    color: "#9ca3af",
+                                    fontSize: "0.9rem",
+                                    lineHeight: 1.5,
+                                    flexGrow: 1,
+                                }}
+                            >
+                                {tool.description}
+                            </p>
+
+                            {/* Conditional Bottom Context Triggers */}
+                            <div
+                                style={{
+                                    marginTop: "24px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    color: isDisabled ? "#6b7280" : tool.color,
+                                    fontSize: "0.85rem",
+                                    fontWeight: 500,
+                                }}
+                            >
+                                {tool.status === "maintenance" && (
+                                    <span
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            color: "#ef4444",
+                                        }}
+                                    >
+                                        <AlertTriangle size={14} /> Under
+                                        Construction
+                                    </span>
+                                )}
+                                {tool.status === "upcoming" && (
+                                    <span
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                        }}
+                                    >
+                                        Deployment Scheduled
+                                    </span>
+                                )}
+                                {tool.status === "stable" && (
+                                    <span
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                        }}
+                                    >
+                                        Initialize Engine{" "}
+                                        <ChevronRight size={14} />
+                                    </span>
+                                )}
+                                {tool.status === "beta" && (
+                                    <span
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                        }}
+                                    >
+                                        Launch Sandbox Preview{" "}
+                                        <ChevronRight size={14} />
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    );
+
+                    return isDisabled ? (
+                        <div key={tool.ref}>{CardInnerContent}</div>
+                    ) : (
+                        <Link
+                            key={tool.ref}
+                            to={tool.path}
+                            style={{ textDecoration: "none" }}
+                        >
+                            {CardInnerContent}
+                        </Link>
+                    );
+                })}
+            </div>
+
+            <div
+                style={{
+                    marginTop: "80px",
+                    fontSize: "0.75rem",
+                    color: "#4b5563",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                }}
+            >
+                <ShieldCheck size={14} /> Cryptographic client-side execution
+                environment. All file compilations processed safely in-browser.
+            </div>
+        </div>
+    );
 };
 
 export default Home;

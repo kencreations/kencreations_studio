@@ -120,7 +120,8 @@ const EditableNumber = ({
             onDoubleClick={() => setIsEditing(true)}
             onClick={() => setIsEditing(true)}
             style={{ cursor: "pointer", borderBottom: "1px dashed #cbd5e1" }}
-            title="Click to edit">
+            title="Click to edit"
+        >
             {value.toFixed(1)}
         </span>
     );
@@ -170,7 +171,10 @@ const ColorSelect = ({
     useEffect(() => {
         if (isOpen && containerRef.current) {
             const rect = containerRef.current.getBoundingClientRect();
-            const sidebar = containerRef.current.closest(".sidebar-content") || containerRef.current.closest(".sidebar") || document.body;
+            const sidebar =
+                containerRef.current.closest(".sidebar-content") ||
+                containerRef.current.closest(".sidebar") ||
+                document.body;
             const sidebarRect = sidebar.getBoundingClientRect();
 
             // If there's enough space (at least 270px) inside the sidebar container to the right of the picker, align left.
@@ -213,13 +217,15 @@ const ColorSelect = ({
                     fontSize: "12px",
                     height: "28px",
                     userSelect: "none",
-                }}>
+                }}
+            >
                 <div
                     style={{
                         display: "flex",
                         alignItems: "center",
                         gap: "6px",
-                    }}>
+                    }}
+                >
                     <div
                         style={{
                             width: "12px",
@@ -260,7 +266,8 @@ const ColorSelect = ({
                         flexDirection: "column",
                         gap: "8px",
                         color: "#1e293b",
-                    }}>
+                    }}
+                >
                     {/* BRAND TABS */}
                     <div
                         style={{
@@ -269,7 +276,8 @@ const ColorSelect = ({
                             padding: "2px",
                             borderRadius: "6px",
                             gap: "2px",
-                        }}>
+                        }}
+                    >
                         {["Bambu", "eSun"].map((tab) => (
                             <button
                                 key={tab}
@@ -299,7 +307,8 @@ const ColorSelect = ({
                                             ? "0 1px 2px rgba(0,0,0,0.08)"
                                             : "none",
                                     transition: "all 0.15s",
-                                }}>
+                                }}
+                            >
                                 {tab}
                             </button>
                         ))}
@@ -314,7 +323,8 @@ const ColorSelect = ({
                                     gridTemplateColumns:
                                         "repeat(5, minmax(0, 1fr))",
                                     gap: "6px",
-                                }}>
+                                }}
+                            >
                                 {colors.map((c) => {
                                     const isSelected =
                                         value.toUpperCase() ===
@@ -333,7 +343,8 @@ const ColorSelect = ({
                                                 alignItems: "center",
                                                 cursor: "pointer",
                                                 minWidth: 0,
-                                            }}>
+                                            }}
+                                        >
                                             <div
                                                 style={{
                                                     display: "flex",
@@ -359,7 +370,8 @@ const ColorSelect = ({
                                                     if (!isSelected)
                                                         e.currentTarget.style.backgroundColor =
                                                             "transparent";
-                                                }}>
+                                                }}
+                                            >
                                                 <div
                                                     style={{
                                                         width: "28px",
@@ -382,7 +394,8 @@ const ColorSelect = ({
                                                     textOverflow: "ellipsis",
                                                     whiteSpace: "nowrap",
                                                 }}
-                                                title={c.name}>
+                                                title={c.name}
+                                            >
                                                 {c.name}
                                             </span>
                                         </div>
@@ -398,7 +411,8 @@ const ColorSelect = ({
                                     gridTemplateColumns:
                                         "repeat(5, minmax(0, 1fr))",
                                     gap: "6px",
-                                }}>
+                                }}
+                            >
                                 {ESUN_COLORS.map((c) => {
                                     const isSelected =
                                         value.toUpperCase() ===
@@ -417,7 +431,8 @@ const ColorSelect = ({
                                                 alignItems: "center",
                                                 cursor: "pointer",
                                                 minWidth: 0,
-                                            }}>
+                                            }}
+                                        >
                                             <div
                                                 style={{
                                                     display: "flex",
@@ -443,7 +458,8 @@ const ColorSelect = ({
                                                     if (!isSelected)
                                                         e.currentTarget.style.backgroundColor =
                                                             "transparent";
-                                                }}>
+                                                }}
+                                            >
                                                 <div
                                                     style={{
                                                         width: "28px",
@@ -466,7 +482,8 @@ const ColorSelect = ({
                                                     textOverflow: "ellipsis",
                                                     whiteSpace: "nowrap",
                                                 }}
-                                                title={c.name}>
+                                                title={c.name}
+                                            >
                                                 {c.name}
                                             </span>
                                         </div>
@@ -485,6 +502,7 @@ interface SidebarProps {
     isDesign2?: boolean;
     isPencilTopper?: boolean;
     isDesign3?: boolean;
+    isDesign4?: boolean;
     state: AppState;
     updateState: (updates: Partial<AppState>) => void;
     bounds: { x: number; y: number; z: number };
@@ -497,6 +515,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     isDesign2,
     isPencilTopper,
     isDesign3,
+    isDesign4,
 }) => {
     const [allPresets, setAllPresets] = useState<
         { name: string; mode: string; state: AppState }[]
@@ -628,13 +647,33 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <ChevronLeft size={20} />
                 </Link>
                 <span className="editor-title">
-                    {isPencilTopper ? "Pencil Name Topper" : (isDesign3 ? "ID Name Tag (Design 3)" : (isDesign2 ? "ID Name Tag (Design 2)" : "Id Name Tag"))}
+                    {isPencilTopper
+                        ? "Pencil Name Topper"
+                        : isDesign3
+                          ? "ID Name Tag (Design 3)"
+                          : isDesign2
+                            ? "ID Name Tag (Design 2)"
+                            : "Id Name Tag"}
                 </span>
             </div>
 
             <div className="sidebar-content">
                 {/* MASS CREATION SECTION */}
-                <div className="control-group" style={{ marginBottom: "16px", backgroundColor: state.massCreation?.enabled ? "rgba(99, 102, 241, 0.05)" : "transparent", padding: "12px", borderRadius: "8px", border: state.massCreation?.enabled ? "1px solid rgba(99, 102, 241, 0.2)" : "1px solid transparent", transition: "all 0.2s" }}>
+                <div
+                    className="control-group"
+                    style={{
+                        marginBottom: "16px",
+                        backgroundColor: state.massCreation?.enabled
+                            ? "rgba(99, 102, 241, 0.05)"
+                            : "transparent",
+                        padding: "12px",
+                        borderRadius: "8px",
+                        border: state.massCreation?.enabled
+                            ? "1px solid rgba(99, 102, 241, 0.2)"
+                            : "1px solid transparent",
+                        transition: "all 0.2s",
+                    }}
+                >
                     <h2
                         className="control-title"
                         style={{
@@ -642,8 +681,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                             alignItems: "center",
                             gap: "6px",
                             justifyContent: "space-between",
-                            margin: 0
-                        }}>
+                            margin: 0,
+                        }}
+                    >
                         <label
                             style={{
                                 display: "flex",
@@ -652,69 +692,170 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 cursor: "pointer",
                                 margin: 0,
                                 fontWeight: 700,
-                                color: state.massCreation?.enabled ? "#6366f1" : "var(--text-secondary)",
-                            }}>
-                            <input 
-                                type="checkbox" 
+                                color: state.massCreation?.enabled
+                                    ? "#6366f1"
+                                    : "var(--text-secondary)",
+                            }}
+                        >
+                            <input
+                                type="checkbox"
                                 checked={state.massCreation?.enabled || false}
-                                onChange={(e) => updateState({ massCreation: { ...state.massCreation, printerType: state.massCreation?.printerType || "A1 Mini", tags: state.massCreation?.tags || [], enabled: e.target.checked } })}
+                                onChange={(e) =>
+                                    updateState({
+                                        massCreation: {
+                                            ...state.massCreation,
+                                            printerType:
+                                                state.massCreation
+                                                    ?.printerType || "A1 Mini",
+                                            tags:
+                                                state.massCreation?.tags || [],
+                                            enabled: e.target.checked,
+                                        },
+                                    })
+                                }
                                 style={{ accentColor: "#6366f1" }}
                             />
                             Mass Creation Mode
                         </label>
                     </h2>
                     {state.massCreation?.enabled && (
-                        <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div
+                            style={{
+                                marginTop: "12px",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "10px",
+                            }}
+                        >
                             <div className="control-item">
-                                <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                    <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: 700, color: "var(--text-tertiary)" }}>Printer Build Plate</span>
-                                    <select 
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "4px",
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: "10px",
+                                            textTransform: "uppercase",
+                                            fontWeight: 700,
+                                            color: "var(--text-tertiary)",
+                                        }}
+                                    >
+                                        Printer Build Plate
+                                    </span>
+                                    <select
                                         style={{
                                             padding: "6px",
                                             borderRadius: "4px",
                                             border: "1px solid var(--border-color)",
-                                            backgroundColor: "var(--bg-primary)",
+                                            backgroundColor:
+                                                "var(--bg-primary)",
                                             color: "var(--text-primary)",
                                             fontSize: "12px",
-                                            outline: "none"
+                                            outline: "none",
                                         }}
-                                        value={state.massCreation.printerType || "A1 Mini"}
-                                        onChange={(e) => updateState({ massCreation: { ...state.massCreation, printerType: e.target.value as any, tags: state.massCreation?.tags || [], enabled: true } })}
+                                        value={
+                                            state.massCreation.printerType ||
+                                            "A1 Mini"
+                                        }
+                                        onChange={(e) =>
+                                            updateState({
+                                                massCreation: {
+                                                    ...state.massCreation,
+                                                    printerType: e.target
+                                                        .value as any,
+                                                    tags:
+                                                        state.massCreation
+                                                            ?.tags || [],
+                                                    enabled: true,
+                                                },
+                                            })
+                                        }
                                     >
-                                        <option value="A1 Mini">A1 Mini (180x180)</option>
+                                        <option value="A1 Mini">
+                                            A1 Mini (180x180)
+                                        </option>
                                         <option value="A1">A1 (256x256)</option>
-                                        <option value="P1S">P1S (256x256)</option>
-                                        <option value="X1 Carbon">X1 Carbon (256x256)</option>
+                                        <option value="P1S">
+                                            P1S (256x256)
+                                        </option>
+                                        <option value="X1 Carbon">
+                                            X1 Carbon (256x256)
+                                        </option>
                                     </select>
                                 </label>
                             </div>
                             <div className="control-item">
-                                <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                    <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: 700, color: "var(--text-tertiary)" }}>Data Source (Excel)</span>
-                                    <input 
-                                        type="file" 
+                                <label
+                                    style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "4px",
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: "10px",
+                                            textTransform: "uppercase",
+                                            fontWeight: 700,
+                                            color: "var(--text-tertiary)",
+                                        }}
+                                    >
+                                        Data Source (Excel)
+                                    </span>
+                                    <input
+                                        type="file"
                                         accept=".xlsx, .xls"
                                         onChange={async (e) => {
-                                            if (e.target.files && e.target.files.length > 0) {
+                                            if (
+                                                e.target.files &&
+                                                e.target.files.length > 0
+                                            ) {
                                                 const file = e.target.files[0];
-                                                e.target.value = ''; // Clear value to allow re-upload
-                                                updateState({ isProcessing: true, processingMessage: "Parsing Excel and laying out batch tags..." });
+                                                e.target.value = ""; // Clear value to allow re-upload
+                                                updateState({
+                                                    isProcessing: true,
+                                                    processingMessage:
+                                                        "Parsing Excel and laying out batch tags...",
+                                                });
                                                 try {
-                                                    const { parseExcelTags } = await import('../utils/excelParser');
-                                                    const tags = await parseExcelTags(file);
-                                                    
+                                                    const { parseExcelTags } =
+                                                        await import("../utils/excelParser");
+                                                    const tags =
+                                                        await parseExcelTags(
+                                                            file,
+                                                        );
+
                                                     // Give UI a moment to show the loader, then update tags
                                                     setTimeout(() => {
-                                                        updateState({ 
-                                                            massCreation: { ...state.massCreation, printerType: state.massCreation?.printerType || "A1 Mini", tags, enabled: true },
+                                                        updateState({
+                                                            massCreation: {
+                                                                ...state.massCreation,
+                                                                printerType:
+                                                                    state
+                                                                        .massCreation
+                                                                        ?.printerType ||
+                                                                    "A1 Mini",
+                                                                tags,
+                                                                enabled: true,
+                                                            },
                                                             isProcessing: false,
-                                                            processingMessage: undefined
+                                                            processingMessage:
+                                                                undefined,
                                                         });
                                                     }, 500);
-                                                    
                                                 } catch (err) {
-                                                    updateState({ isProcessing: false, processingMessage: undefined });
-                                                    alert("Error parsing excel: " + err);
+                                                    updateState({
+                                                        isProcessing: false,
+                                                        processingMessage:
+                                                            undefined,
+                                                    });
+                                                    alert(
+                                                        "Error parsing excel: " +
+                                                            err,
+                                                    );
                                                 }
                                             }
                                         }}
@@ -722,11 +863,24 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     />
                                 </label>
                             </div>
-                            {state.massCreation.tags && state.massCreation.tags.length > 0 && (
-                                <div style={{ fontSize: "11px", color: "#10b981", fontWeight: 500, padding: "4px", backgroundColor: "rgba(16, 185, 129, 0.1)", borderRadius: "4px", textAlign: "center" }}>
-                                    Loaded {state.massCreation.tags.length} tags successfully.
-                                </div>
-                            )}
+                            {state.massCreation.tags &&
+                                state.massCreation.tags.length > 0 && (
+                                    <div
+                                        style={{
+                                            fontSize: "11px",
+                                            color: "#10b981",
+                                            fontWeight: 500,
+                                            padding: "4px",
+                                            backgroundColor:
+                                                "rgba(16, 185, 129, 0.1)",
+                                            borderRadius: "4px",
+                                            textAlign: "center",
+                                        }}
+                                    >
+                                        Loaded {state.massCreation.tags.length}{" "}
+                                        tags successfully.
+                                    </div>
+                                )}
                         </div>
                     )}
                 </div>
@@ -740,13 +894,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                             alignItems: "center",
                             gap: "6px",
                             justifyContent: "space-between",
-                        }}>
+                        }}
+                    >
                         <span
                             style={{
                                 display: "flex",
                                 alignItems: "center",
                                 gap: "6px",
-                            }}>
+                            }}
+                        >
                             <Save size={14} /> Saved Designs
                         </span>
                     </h2>
@@ -758,7 +914,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             gap: "8px",
                             marginTop: "8px",
                             marginBottom: "12px",
-                        }}>
+                        }}
+                    >
                         <input
                             type="text"
                             placeholder="Design Name (e.g. Neon Yellow)"
@@ -801,7 +958,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             onMouseLeave={(e) => {
                                 e.currentTarget.style.background =
                                     "transparent";
-                            }}>
+                            }}
+                        >
                             Save
                         </button>
                     </div>
@@ -816,7 +974,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 maxHeight: "150px",
                                 overflowY: "auto",
                                 paddingRight: "4px",
-                            }}>
+                            }}
+                        >
                             {modePresets.map((preset) => (
                                 <div
                                     key={preset.name}
@@ -829,7 +988,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         background: "rgba(255, 255, 255, 0.05)",
                                         border: "1px solid rgba(255, 255, 255, 0.1)",
                                         transition: "all 0.2s",
-                                    }}>
+                                    }}
+                                >
                                     <span
                                         onClick={() => loadPreset(preset.state)}
                                         style={{
@@ -842,11 +1002,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             overflow: "hidden",
                                             textOverflow: "ellipsis",
                                         }}
-                                        title="Click to load design settings">
+                                        title="Click to load design settings"
+                                    >
                                         {preset.name}
                                     </span>
                                     <div
-                                        style={{ display: "flex", gap: "6px" }}>
+                                        style={{ display: "flex", gap: "6px" }}
+                                    >
                                         <button
                                             className="action-btn"
                                             onClick={() =>
@@ -856,7 +1018,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 padding: "4px",
                                                 minWidth: "auto",
                                             }}
-                                            title="Load Design">
+                                            title="Load Design"
+                                        >
                                             <FolderOpen size={13} />
                                         </button>
                                         <button
@@ -868,7 +1031,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 padding: "4px",
                                                 minWidth: "auto",
                                             }}
-                                            title="Delete Design">
+                                            title="Delete Design"
+                                        >
                                             <Trash2 size={13} />
                                         </button>
                                     </div>
@@ -883,7 +1047,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 textAlign: "center",
                                 fontStyle: "italic",
                                 padding: "4px 0",
-                            }}>
+                            }}
+                        >
                             No saved designs yet.
                         </div>
                     )}
@@ -897,7 +1062,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             display: "flex",
                             alignItems: "center",
                             gap: "6px",
-                        }}>
+                        }}
+                    >
                         <Type size={14} /> Lines ({state.lines.length} of 8)
                     </h2>
 
@@ -906,7 +1072,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             display: "flex",
                             flexDirection: "column",
                             gap: "12px",
-                        }}>
+                        }}
+                    >
                         {state.lines.map((line, idx) => (
                             <div key={line.id} className="line-card">
                                 <div className="line-card-header">
@@ -922,7 +1089,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 onClick={() =>
                                                     moveLine(idx, "up")
                                                 }
-                                                disabled={idx === 0}>
+                                                disabled={idx === 0}
+                                            >
                                                 <ArrowUp size={14} />
                                             </button>
                                             <button
@@ -933,7 +1101,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 disabled={
                                                     idx ===
                                                     state.lines.length - 1
-                                                }>
+                                                }
+                                            >
                                                 <ArrowDown size={14} />
                                             </button>
                                             <button
@@ -941,7 +1110,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 onClick={() => removeLine(idx)}
                                                 disabled={
                                                     state.lines.length === 1
-                                                }>
+                                                }
+                                            >
                                                 <Trash2 size={14} />
                                             </button>
                                         </div>
@@ -976,7 +1146,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 )?.name || "inherit",
                                             fontSize: "1rem",
                                             padding: "6px 12px",
-                                        }}>
+                                        }}
+                                    >
                                         {FONTS.map((f) => (
                                             <option
                                                 key={f.url}
@@ -984,7 +1155,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 style={{
                                                     fontFamily: f.name,
                                                     fontSize: "1.1rem",
-                                                }}>
+                                                }}
+                                            >
                                                 {f.name}
                                             </option>
                                         ))}
@@ -998,7 +1170,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 display: "flex",
                                                 gap: "8px",
                                                 alignItems: "center",
-                                            }}>
+                                            }}
+                                        >
                                             <div
                                                 style={{
                                                     width: "20px",
@@ -1031,7 +1204,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     className="line-grid"
                                     style={{
                                         gridTemplateColumns: "1fr 1fr 1fr",
-                                    }}>
+                                    }}
+                                >
                                     <div className="control-item">
                                         <label>
                                             <span>Size</span>
@@ -1139,7 +1313,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     marginTop: "4px",
                                     borderStyle: "dashed",
                                     padding: "12px",
-                                }}>
+                                }}
+                            >
                                 <Plus
                                     size={18}
                                     style={{ marginRight: "6px" }}
@@ -1149,7 +1324,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                             <div
                                 className="control-item"
-                                style={{ marginTop: "12px", padding: "0 8px" }}>
+                                style={{ marginTop: "12px", padding: "0 8px" }}
+                            >
                                 <label>
                                     <span>Line spacing</span>
                                     <EditableNumber
@@ -1196,12 +1372,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                             display: "flex",
                             alignItems: "center",
                             gap: "6px",
-                        }}>
+                        }}
+                    >
                         <Palette size={14} /> Colors
                     </h2>
                     <div
                         className="line-grid"
-                        style={{ gridTemplateColumns: "1fr 1fr" }}>
+                        style={{ gridTemplateColumns: "1fr 1fr" }}
+                    >
                         {isPencilTopper ? (
                             <>
                                 <div className="control-item">
@@ -1211,7 +1389,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             display: "flex",
                                             gap: "8px",
                                             alignItems: "center",
-                                        }}>
+                                        }}
+                                    >
                                         <div
                                             style={{
                                                 width: "20px",
@@ -1239,7 +1418,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             display: "flex",
                                             gap: "8px",
                                             alignItems: "center",
-                                        }}>
+                                        }}
+                                    >
                                         <div
                                             style={{
                                                 width: "20px",
@@ -1270,7 +1450,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             display: "flex",
                                             gap: "8px",
                                             alignItems: "center",
-                                        }}>
+                                        }}
+                                    >
                                         <div
                                             style={{
                                                 width: "20px",
@@ -1300,7 +1481,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                             display: "flex",
                                             gap: "8px",
                                             alignItems: "center",
-                                        }}>
+                                        }}
+                                    >
                                         <div
                                             style={{
                                                 width: "20px",
@@ -1341,9 +1523,61 @@ const Sidebar: React.FC<SidebarProps> = ({
                             display: "flex",
                             alignItems: "center",
                             gap: "6px",
-                        }}>
+                        }}
+                    >
                         <ScanLine size={14} /> Shape
                     </h2>
+
+                    {isDesign4 && (
+                        <div style={{ marginBottom: "16px" }}>
+                            <span
+                                style={{
+                                    fontSize: "0.75rem",
+                                    fontWeight: 700,
+                                    color: "var(--text-tertiary)",
+                                    textTransform: "uppercase",
+                                }}
+                            >
+                                Model Selection
+                            </span>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: "8px",
+                                    marginTop: "8px",
+                                }}
+                            >
+                                {[
+                                    { id: 0, label: "Model 1" },
+                                    { id: 1, label: "Model 2" },
+                                    { id: 2, label: "Model 3" },
+                                ].map((m) => (
+                                    <button
+                                        key={m.id}
+                                        className="btn-outline"
+                                        onClick={() =>
+                                            updateShape({ modelType: m.id })
+                                        }
+                                        style={{
+                                            flex: 1,
+                                            padding: "6px",
+                                            fontSize: "11px",
+                                            backgroundColor:
+                                                state.shape.modelType === m.id
+                                                    ? "var(--bg-secondary)"
+                                                    : "transparent",
+                                            borderColor:
+                                                state.shape.modelType === m.id
+                                                    ? "var(--accent)"
+                                                    : "var(--border-color)",
+                                        }}
+                                    >
+                                        {m.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {isPencilTopper ? (
                         <div
@@ -1352,7 +1586,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 display: "flex",
                                 flexDirection: "column",
                                 gap: "12px",
-                            }}>
+                            }}
+                        >
                             <div className="control-item">
                                 <label>
                                     <span>Outline Width</span>
@@ -1426,7 +1661,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         fontWeight: 700,
                                         color: "var(--text-tertiary)",
                                         textTransform: "uppercase",
-                                    }}>
+                                    }}
+                                >
                                     Size
                                 </span>
                                 <div
@@ -1435,20 +1671,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         display: "flex",
                                         flexDirection: "column",
                                         gap: "8px",
-                                    }}>
+                                    }}
+                                >
                                     <div
                                         style={{
                                             display: "flex",
                                             justifyContent: "space-between",
                                             alignItems: "center",
-                                        }}>
+                                        }}
+                                    >
                                         <span
                                             className="hud-label"
                                             style={{
                                                 fontSize: "0.8rem",
                                                 fontWeight: 600,
                                                 color: "var(--text-secondary)",
-                                            }}>
+                                            }}
+                                        >
                                             Auto Size
                                         </span>
                                         <input
@@ -1479,7 +1718,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                                     <div
                                         className="control-item"
-                                        style={{ marginBottom: "12px" }}>
+                                        style={{ marginBottom: "12px" }}
+                                    >
                                         <label>
                                             <span>Padding</span>
                                             <EditableNumber
@@ -1572,7 +1812,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                                     <div
                                         className="line-grid"
-                                        style={{ marginTop: "12px" }}>
+                                        style={{ marginTop: "12px" }}
+                                    >
                                         <div className="control-item">
                                             <label>
                                                 <span>Corner radius</span>
@@ -1646,12 +1887,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         fontWeight: 700,
                                         color: "var(--text-tertiary)",
                                         textTransform: "uppercase",
-                                    }}>
+                                    }}
+                                >
                                     Waves
                                 </span>
                                 <div
                                     className="line-grid"
-                                    style={{ marginTop: "12px" }}>
+                                    style={{ marginTop: "12px" }}
+                                >
                                     <div className="control-item">
                                         <label>
                                             <span>Amplitude</span>
@@ -1728,12 +1971,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         fontWeight: 700,
                                         color: "var(--text-tertiary)",
                                         textTransform: "uppercase",
-                                    }}>
+                                    }}
+                                >
                                     Depth
                                 </span>
                                 <div
                                     className="line-grid"
-                                    style={{ marginTop: "12px" }}>
+                                    style={{ marginTop: "12px" }}
+                                >
                                     <div className="control-item">
                                         <label>
                                             <span>Base</span>
@@ -1792,7 +2037,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 </div>
                                 <div
                                     className="line-grid"
-                                    style={{ marginTop: "12px" }}>
+                                    style={{ marginTop: "12px" }}
+                                >
                                     <div className="control-item">
                                         <label>
                                             <span>Border width</span>
@@ -1847,15 +2093,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     display: "flex",
                                     alignItems: "center",
                                     gap: "6px",
-                                }}>
+                                }}
+                            >
                                 <CircleDashed size={14} /> Pencil Hole
                             </h2>
                             <div
                                 className="line-grid"
-                                style={{ marginTop: "12px" }}>
+                                style={{ marginTop: "12px" }}
+                            >
                                 <div
                                     className="control-item"
-                                    style={{ gridColumn: "span 2" }}>
+                                    style={{ gridColumn: "span 2" }}
+                                >
                                     <label>
                                         <span>Diameter (mm)</span>
                                         <EditableNumber
@@ -1895,7 +2144,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     display: "flex",
                                     justifyContent: "space-between",
                                     alignItems: "center",
-                                }}>
+                                }}
+                            >
                                 <h2
                                     className="control-title"
                                     style={{
@@ -1903,7 +2153,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                         display: "flex",
                                         alignItems: "center",
                                         gap: "6px",
-                                    }}>
+                                    }}
+                                >
                                     <CircleDashed size={14} /> Lace hole
                                 </h2>
                                 <input
@@ -1923,7 +2174,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             {state.laceHole.enabled && (
                                 <div
                                     className="line-grid"
-                                    style={{ marginTop: "8px" }}>
+                                    style={{ marginTop: "8px" }}
+                                >
                                     <div className="control-item">
                                         <label>
                                             <span>Width</span>
@@ -1998,7 +2250,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 gap: "10px",
                                                 alignItems: "center",
                                                 minHeight: "28px",
-                                            }}>
+                                            }}
+                                        >
                                             <label
                                                 style={{
                                                     display: "flex",
@@ -2006,7 +2259,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     gap: "6px",
                                                     margin: 0,
                                                     fontWeight: 500,
-                                                }}>
+                                                }}
+                                            >
                                                 <input
                                                     type="radio"
                                                     name="lace-hole-type"
@@ -2030,7 +2284,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                     gap: "6px",
                                                     margin: 0,
                                                     fontWeight: 500,
-                                                }}>
+                                                }}
+                                            >
                                                 <input
                                                     type="radio"
                                                     name="lace-hole-type"
@@ -2051,7 +2306,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     </div>
                                     <div
                                         className="control-item"
-                                        style={{ gridColumn: "span 2" }}>
+                                        style={{ gridColumn: "span 2" }}
+                                    >
                                         <label>
                                             <span>Top margin</span>
                                             <span className="control-value">
@@ -2080,11 +2336,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     </div>
                                     <div
                                         className="control-item"
-                                        style={{ gridColumn: "span 2", marginTop: "8px" }}>
+                                        style={{
+                                            gridColumn: "span 2",
+                                            marginTop: "8px",
+                                        }}
+                                    >
                                         <label>
                                             <span>X Offset</span>
                                             <span className="control-value">
-                                                {(state.laceHole.offsetX || 0).toFixed(1)}
+                                                {(
+                                                    state.laceHole.offsetX || 0
+                                                ).toFixed(1)}
                                             </span>
                                         </label>
                                         <input
@@ -2097,7 +2359,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 updateState({
                                                     laceHole: {
                                                         ...state.laceHole,
-                                                        offsetX: parseFloat(e.target.value),
+                                                        offsetX: parseFloat(
+                                                            e.target.value,
+                                                        ),
                                                     },
                                                 })
                                             }
@@ -2105,11 +2369,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                                     </div>
                                     <div
                                         className="control-item"
-                                        style={{ gridColumn: "span 2", marginTop: "8px" }}>
+                                        style={{
+                                            gridColumn: "span 2",
+                                            marginTop: "8px",
+                                        }}
+                                    >
                                         <label>
                                             <span>Y Offset</span>
                                             <span className="control-value">
-                                                {(state.laceHole.offsetY || 0).toFixed(1)}
+                                                {(
+                                                    state.laceHole.offsetY || 0
+                                                ).toFixed(1)}
                                             </span>
                                         </label>
                                         <input
@@ -2122,7 +2392,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                                 updateState({
                                                     laceHole: {
                                                         ...state.laceHole,
-                                                        offsetY: parseFloat(e.target.value),
+                                                        offsetY: parseFloat(
+                                                            e.target.value,
+                                                        ),
                                                     },
                                                 })
                                             }

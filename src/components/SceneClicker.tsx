@@ -3,11 +3,21 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
+import { Evaluator, Brush, SUBTRACTION } from "three-bvh-csg";
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-mesh-bvh";
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 export interface ClickerState {
-    style: "classic" | "slim" | "elevated" | "ergonomic" | "custom";
+    style: "classic" | "slim" | "elevated" | "ergonomic" | "custom" | "svg"; // Add "svg"
     customStlUrl: string | null;
     customStlName: string | null;
+    customSvgString: string | null; // NEW
+    customSvgName: string | null; // NEW
+    svgScale: number; // NEW
     baseColor: string;
     hookColor: string;
     hookEnabled: boolean;
@@ -91,16 +101,17 @@ function flattenLogoRegion(geometry: THREE.BufferGeometry): void {
 
     // Logo footprint on the front face: centred on X, in upper-Z half
     // These XZ bounds cover the typical 20×10 mm logo area on the sloped top face.
-    const logoXHalf = bboxSize.x * 0.38;   // ±38% of width
+    const logoXHalf = bboxSize.x * 0.38; // ±38% of width
     const logoCentreX = bboxCenter.x;
-    const logoZLow  = bboxCenter.z + bboxSize.z * 0.15;  // lower Z of logo
-    const logoZHigh = bbox.max.z;                          // up to top of model
+    const logoZLow = bboxCenter.z + bboxSize.z * 0.15; // lower Z of logo
+    const logoZHigh = bbox.max.z; // up to top of model
 
     let changed = 0;
     for (let i = 0; i < posAttr.count; i++) {
         v.fromBufferAttribute(posAttr, i);
 
-        const inXBand = v.x > logoCentreX - logoXHalf && v.x < logoCentreX + logoXHalf;
+        const inXBand =
+            v.x > logoCentreX - logoXHalf && v.x < logoCentreX + logoXHalf;
         const inZBand = v.z > logoZLow && v.z < logoZHigh;
         const protruding = v.y > wallY + 0.05; // only relief verts stick out past wall
 
@@ -160,7 +171,11 @@ const PrintNozzle: React.FC<{
         <group position={[nozzleX, nozzleY, nozzleZ]}>
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 8]}>
                 <coneGeometry args={[3, 16, 16]} />
-                <meshStandardMaterial color="#475569" roughness={0.5} metalness={0.8} />
+                <meshStandardMaterial
+                    color="#475569"
+                    roughness={0.5}
+                    metalness={0.8}
+                />
             </mesh>
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 0.5]}>
                 <coneGeometry args={[0.8, 1, 12]} />
@@ -216,54 +231,93 @@ const ModelLoader: React.FC<{
             return state.customStlUrl;
         }
         const fileNames = {
-            classic:    "/models/obj_1_fidget clicker base.stl",
-            slim:       "/models/obj_2_fidget clicker base.stl",
-            elevated:   "/models/obj_3_fidget clicker base.stl",
-            ergonomic:  "/models/obj_4_fidget clicker base.stl",
-            custom:     "/models/obj_3_fidget clicker base.stl",
+            classic: "/models/obj_1_fidget clicker base.stl",
+            slim: "/models/obj_2_fidget clicker base.stl",
+            elevated: "/models/obj_3_fidget clicker base.stl",
+            ergonomic: "/models/obj_4_fidget clicker base.stl",
+            custom: "/models/obj_3_fidget clicker base.stl",
         };
         return fileNames[state.style] || fileNames.elevated;
     }, [state.style, state.customStlUrl]);
 
-    // 2. Load STL base geometry — re-runs whenever model URL or logoRemoved changes
+    // 2. Load STL base geometry
     useEffect(() => {
+        if (state.style === "svg") return; // SKIP STL LOADER IF SVG
+
         const loader = new STLLoader();
         loader.load(
             modelUrl,
             (geometry) => {
                 geometry.computeVertexNormals();
                 geometry.center();
-
-                // ✅ If user wants logo removed, flatten it in the geometry itself
-                if (state.logoRemoved) {
-                    flattenLogoRegion(geometry);
-                }
-
+                if (state.logoRemoved) flattenLogoRegion(geometry);
                 setBaseGeometry(geometry);
             },
             undefined,
-            (error) => {
-                console.error("Failed to load clicker base STL:", error);
-            },
+            (error) => console.error("Failed to load clicker base STL:", error),
         );
-    }, [modelUrl, state.logoRemoved]);
+    }, [modelUrl, state.logoRemoved, state.style]);
 
-    // Load STL connector geometry
+    // --- ADDED: SVG TO CLICKER CSG LOGIC ---
     useEffect(() => {
-        const loader = new STLLoader();
-        loader.load(
-            "/models/obj_1_end connector.stl",
-            (geometry) => {
-                geometry.computeVertexNormals();
-                geometry.center();
-                setConnectorGeometry(geometry);
-            },
-            undefined,
-            (error) => {
-                console.error("Failed to load end connector STL:", error);
-            },
-        );
-    }, []);
+        if (state.style !== "svg" || !state.customSvgString) return;
+
+        try {
+            const loader = new SVGLoader();
+            const svgData = loader.parse(state.customSvgString);
+
+            const shapes: THREE.Shape[] = [];
+            svgData.paths.forEach((path) => {
+                shapes.push(...path.toShapes(true));
+            });
+
+            if (shapes.length === 0) return;
+
+            const thickness = 12.8; // Match standard clicker height
+            const extrudeGeo = new THREE.ExtrudeGeometry(shapes, {
+                depth: thickness,
+                bevelEnabled: true,
+                bevelThickness: 0.5,
+                bevelSize: 0.5,
+                bevelSegments: 3,
+                curveSegments: 16,
+            });
+
+            extrudeGeo.center();
+            const s = state.svgScale || 0.2; // SVGs are usually huge, start scaled down
+            extrudeGeo.scale(s, s, 1); // Only scale X and Y, keep thickness intact
+            // SVGs render Y-down. Rotate by 180 on X to fix upright without breaking winding order
+            extrudeGeo.rotateX(Math.PI);
+            extrudeGeo.computeVertexNormals();
+            extrudeGeo.computeBoundsTree();
+
+            // 1. Convert SVG Base to CSG Brush
+            const baseBrush = new Brush(extrudeGeo);
+            baseBrush.updateMatrixWorld();
+
+            // 2. Create the Mechanical Switch Hole (14.2mm x 14.2mm for 3D print tolerance)
+            const holeGeo = new THREE.BoxGeometry(14.2, 14.2, thickness + 5);
+            holeGeo.computeBoundsTree();
+            const holeBrush = new Brush(holeGeo);
+            holeBrush.updateMatrixWorld();
+
+            // 3. Subtract the Hole from the SVG
+            const evaluator = new Evaluator();
+            const finalBrush = evaluator.evaluate(
+                baseBrush,
+                holeBrush,
+                SUBTRACTION,
+            );
+
+            const finalGeo = finalBrush.geometry.clone();
+            finalGeo.computeVertexNormals();
+
+            setBaseGeometry(finalGeo);
+        } catch (error) {
+            console.error("Failed to parse SVG:", error);
+        }
+    }, [state.style, state.customSvgString, state.svgScale]);
+    // ---------------------------------------
 
     // 3. Generate Modular Hook Geometry procedurally
     const hookGeometry = useMemo(() => {
@@ -411,7 +465,9 @@ const ModelLoader: React.FC<{
         setCoverMeshRef(null);
 
         if (baseMeshRef.current) {
-            const combinedBox = new THREE.Box3().setFromObject(baseMeshRef.current);
+            const combinedBox = new THREE.Box3().setFromObject(
+                baseMeshRef.current,
+            );
             if (hookMeshRef.current && state.hookEnabled) {
                 combinedBox.expandByObject(hookMeshRef.current);
             }
@@ -461,7 +517,8 @@ const ModelLoader: React.FC<{
                     geometry={baseGeometry}
                     name="base"
                     castShadow
-                    receiveShadow>
+                    receiveShadow
+                >
                     <meshStandardMaterial
                         color={state.baseColor}
                         roughness={0.4}
@@ -478,7 +535,11 @@ const ModelLoader: React.FC<{
                     ref={hookMeshRef}
                     geometry={hookGeometry}
                     name="hook"
-                    position={[hookPlacement.x, hookPlacement.y, hookPlacement.z]}
+                    position={[
+                        hookPlacement.x,
+                        hookPlacement.y,
+                        hookPlacement.z,
+                    ]}
                     rotation={[0, 0, hookPlacement.rotZ]}
                     scale={
                         state.hookStyle === "connector"
@@ -490,7 +551,8 @@ const ModelLoader: React.FC<{
                             : [1, 1, 1]
                     }
                     castShadow
-                    receiveShadow>
+                    receiveShadow
+                >
                     <meshStandardMaterial
                         color={state.hookColor}
                         roughness={0.4}
@@ -505,7 +567,7 @@ const ModelLoader: React.FC<{
 };
 
 const SceneClicker: React.FC<SceneProps> = (props) => {
-    
+    const { isSlicing, activeLayer, totalLayers, slicerPathProgress } = props;
     const [bounds, setBounds] = useState<THREE.Box3 | null>(null);
 
     const floorZ = useMemo(() => {
@@ -522,7 +584,8 @@ const SceneClicker: React.FC<SceneProps> = (props) => {
                 style={{
                     background:
                         "radial-gradient(circle at center, #1b2030 0%, #0d0f17 100%)",
-                }}>
+                }}
+            >
                 <ambientLight intensity={0.5} />
                 <directionalLight
                     position={[15, -30, 40]}
