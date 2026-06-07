@@ -7,6 +7,7 @@ import { estimateTagSize, generateLayout } from "../utils/layoutEngine";
 import { Generator } from "./Scene";
 import { Generator2 } from "./Scene2";
 import { Generator3 } from "./Scene3";
+import { Generator4 } from "./Scene4";
 import { GeneratorPencil } from "./ScenePencil";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -28,9 +29,10 @@ export const BuildPlatePreview: React.FC<BuildPlatePreviewProps> = ({
 }) => {
     const [currentPlate, setCurrentPlate] = useState(0);
 
-    const isDesign2 = location.pathname === "/design2";
-    const isDesign3 = location.pathname === "/design3";
-    const isPencilTopper = location.pathname === "/pencil";
+    const isDesign2 = location.pathname.includes("id-name-tag-2") || location.pathname === "/design2";
+    const isDesign3 = location.pathname.includes("id-name-tag-3") || location.pathname === "/design3";
+    const isDesign4 = location.pathname.includes("id-name-tag-4") || location.pathname === "/design4";
+    const isPencilTopper = location.pathname.includes("pencil-topper") || location.pathname === "/pencil";
 
     const tags = state.massCreation?.tags || [];
     const printerType = state.massCreation?.printerType || "A1 Mini";
@@ -79,6 +81,8 @@ export const BuildPlatePreview: React.FC<BuildPlatePreviewProps> = ({
                     <Generator2 {...props} />
                 ) : isDesign3 ? (
                     <Generator3 {...props} />
+                ) : isDesign4 ? (
+                    <Generator4 {...props} />
                 ) : (
                     <Generator {...props} />
                 )}

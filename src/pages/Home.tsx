@@ -44,7 +44,7 @@ export const RAW_TOOLS: ToolItem[] = [
         icon: <LayoutGrid size={24} strokeWidth={1.5} />,
         color: "#10b981",
         status: "stable",
-        priceHint: "$1.99 / export",
+        priceHint: "Pro Plan",
     },
     {
         ref: "003",
@@ -65,7 +65,7 @@ export const RAW_TOOLS: ToolItem[] = [
         path: "/editor/id-name-tag-4",
         icon: <Sparkles size={24} strokeWidth={1.5} />,
         color: "#10b981",
-        status: "stable",
+        status: "maintenance",
     },
     {
         ref: "004",
@@ -75,8 +75,8 @@ export const RAW_TOOLS: ToolItem[] = [
         path: "/editor/fidget-clicker",
         icon: <Sparkles size={24} strokeWidth={1.5} />,
         color: "#f59e0b",
-        status: "stable",
-        priceHint: "$2.49 / design",
+        status: "maintenance",
+        priceHint: "Pro Plan",
     },
     {
         ref: "005",

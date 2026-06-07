@@ -291,7 +291,7 @@ const Editor: React.FC = () => {
             autoSize: true,
             padding: 10,
             width: 140,
-            height: 48,
+            height: 70,
             cornerRadius: 10,
             amplitude: 0,
             wavelength: 0,
