@@ -71,7 +71,8 @@ const Generator4: React.FC<SceneProps> = ({
                 geometry.computeBoundingBox();
                 const size = new THREE.Vector3();
                 geometry.boundingBox!.getSize(size);
-                setTemplateZSurface(size.z / 2);
+                // size.z is total thickness (base + border). Subtract border to place text on the base plate.
+                setTemplateZSurface(size.z / 2 - debouncedState.shape.topBorder);
                 onBoundsChange?.({ x: size.x, y: size.y, z: size.z });
             })
             .catch((err) => console.error("Binary Load Failed:", err));

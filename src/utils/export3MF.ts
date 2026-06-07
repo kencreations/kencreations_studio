@@ -64,7 +64,11 @@ export async function export3MF(
 
     unitEntries.forEach(({ meshes, transform, inverseRootMatrix }) => {
         const unitObjectId = nextObjectId++;
-        let componentsXml = `    <object id="${unitObjectId}" type="model">\n      <components>\n`;
+        
+        let objectXml = `    <object id="${unitObjectId}" type="model">\n      <mesh>\n        <vertices>\n`;
+        let trianglesXml = `        <triangles>\n`;
+        
+        let vertexOffset = 0;
 
         meshes.forEach((mesh) => {
             const geometry = mesh.geometry;
@@ -77,35 +81,30 @@ export async function export3MF(
                 inverseRootMatrix,
                 mesh.matrixWorld,
             );
-            const meshObjectId = nextObjectId++;
-
-            let objectXml = `        <object id="${meshObjectId}" type="model" pid="1" pindex="${meshColorIndex.get(mesh) ?? 0}">\n          <mesh>\n            <vertices>\n`;
+            const colorIndex = meshColorIndex.get(mesh) ?? 0;
 
             for (let i = 0; i < positionAttr.count; i++) {
                 positionVector.fromBufferAttribute(positionAttr, i);
-                objectXml += `              <vertex x="${positionVector.x.toFixed(5)}" y="${positionVector.y.toFixed(5)}" z="${positionVector.z.toFixed(5)}"/>\n`;
+                positionVector.applyMatrix4(localMatrix);
+                objectXml += `          <vertex x="${positionVector.x.toFixed(5)}" y="${positionVector.y.toFixed(5)}" z="${positionVector.z.toFixed(5)}"/>\n`;
             }
-            objectXml += `            </vertices>\n            <triangles>\n`;
 
             if (indexAttr) {
                 const indices = indexAttr.array;
                 for (let i = 0; i < indices.length; i += 3) {
-                    objectXml += `              <triangle v1="${indices[i]}" v2="${indices[i + 1]}" v3="${indices[i + 2]}"/>\n`;
+                    trianglesXml += `          <triangle v1="${indices[i] + vertexOffset}" v2="${indices[i + 1] + vertexOffset}" v3="${indices[i + 2] + vertexOffset}" pid="1" p1="${colorIndex}"/>\n`;
                 }
             } else {
                 for (let i = 0; i < positionAttr.count; i += 3) {
-                    objectXml += `              <triangle v1="${i}" v2="${i + 1}" v3="${i + 2}"/>\n`;
+                    trianglesXml += `          <triangle v1="${i + vertexOffset}" v2="${i + 1 + vertexOffset}" v3="${i + 2 + vertexOffset}" pid="1" p1="${colorIndex}"/>\n`;
                 }
             }
 
-            objectXml += `            </triangles>\n          </mesh>\n        </object>\n`;
-            resourcesXml += objectXml;
-
-            componentsXml += `        <component objectid="${meshObjectId}" transform="${matrixTo3mfTransform(localMatrix)}" />\n`;
+            vertexOffset += positionAttr.count;
         });
 
-        componentsXml += `      </components>\n    </object>\n`;
-        resourcesXml += componentsXml;
+        objectXml += `        </vertices>\n${trianglesXml}        </triangles>\n      </mesh>\n    </object>\n`;
+        resourcesXml += objectXml;
         buildXml += `    <item objectid="${unitObjectId}" transform="${transform}" />\n`;
     });
 
