@@ -65,7 +65,7 @@ export const RAW_TOOLS: ToolItem[] = [
         path: "/editor/id-name-tag-4",
         icon: <Sparkles size={24} strokeWidth={1.5} />,
         color: "#10b981",
-        status: "maintenance",
+        status: "beta",
     },
     {
         ref: "004",
