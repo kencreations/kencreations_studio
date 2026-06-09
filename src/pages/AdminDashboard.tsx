@@ -7,18 +7,9 @@ import {
     query,
     getDocs,
     addDoc,
-    updateDoc,
     Timestamp,
 } from "firebase/firestore";
-import {
-    ShieldCheck,
-    Download,
-    Users2,
-    LogOut,
-    Key,
-    AlertTriangle,
-    RefreshCw,
-} from "lucide-react";
+import { ShieldCheck, Download, Users2, LogOut, Key, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface GlobalStats {
@@ -56,27 +47,32 @@ const AdminDashboard: React.FC = () => {
         );
 
         const fetchData = async () => {
-            // Fetch Users
-            const usersSnap = await getDocs(query(collection(db, "users")));
-            setUsersList(
-                usersSnap.docs.map((d) => ({
-                    uid: d.id,
-                    email: d.data().email || "N/A",
-                    createdAt: d
-                        .data()
-                        .createdAt?.toDate()
-                        .toLocaleDateString(),
-                })),
-            );
+            try {
+                // Fetch Users
+                const usersSnap = await getDocs(query(collection(db, "users")));
+                setUsersList(
+                    usersSnap.docs.map((d) => ({
+                        uid: d.id,
+                        email: d.data().email || "N/A",
+                        createdAt: d
+                            .data()
+                            .createdAt?.toDate()
+                            .toLocaleDateString(),
+                    })),
+                );
 
-            // Fetch Keys
-            const keysSnap = await getDocs(collection(db, "valid_keys"));
-            setKeysList(
-                keysSnap.docs.map(
-                    (d) => ({ id: d.id, ...d.data() }) as AccessKey,
-                ),
-            );
-            setLoading(false);
+                // Fetch Keys
+                const keysSnap = await getDocs(collection(db, "valid_keys"));
+                setKeysList(
+                    keysSnap.docs.map(
+                        (d) => ({ id: d.id, ...d.data() }) as AccessKey,
+                    ),
+                );
+            } catch (error) {
+                console.error("Error loading administrative telemetry:", error);
+            } finally {
+                setLoading(false);
+            }
         };
         fetchData();
         return () => unsubscribeStats();
@@ -93,6 +89,30 @@ const AdminDashboard: React.FC = () => {
         window.location.reload(); // Quick refresh to show new key
     };
 
+    // Calculate Gmail Auth accounts reactively from the user roster
+    const gmailAuthCount = usersList.filter((user) =>
+        user.email.toLowerCase().endsWith("@gmail.com"),
+    ).length;
+
+    if (loading) {
+        return (
+            <div
+                style={{
+                    minHeight: "100vh",
+                    backgroundColor: "#030712",
+                    color: "#f9fafb",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                }}
+            >
+                <p style={{ fontSize: "1.2rem", color: "#9ca3af" }}>
+                    Loading system telemetry...
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div
             style={{
@@ -102,6 +122,7 @@ const AdminDashboard: React.FC = () => {
                 padding: "40px 24px",
             }}
         >
+            {/* Header Area */}
             <div
                 style={{
                     maxWidth: "1100px",
@@ -117,7 +138,7 @@ const AdminDashboard: React.FC = () => {
                     >
                         Studio Control Panel
                     </h1>
-                    <p style={{ color: "#9ca3af" }}>
+                    <p style={{ color: "#9ca3af", margin: "4px 0 0 0" }}>
                         Core engine diagnostics and product consumption
                         dashboard.
                     </p>
@@ -134,22 +155,26 @@ const AdminDashboard: React.FC = () => {
                         padding: "8px 16px",
                         borderRadius: "10px",
                         cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
                     }}
                 >
                     <LogOut size={14} /> Exit Admin
                 </button>
             </div>
 
-            {/* Metrics */}
+            {/* Metrics Dashboard Matrices */}
             <div
                 style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                     gap: "24px",
                     maxWidth: "1100px",
                     margin: "0 auto 48px auto",
                 }}
             >
+                {/* Metric Card: Total Exports */}
                 <div
                     style={{
                         background: "rgba(255, 255, 255, 0.01)",
@@ -158,6 +183,7 @@ const AdminDashboard: React.FC = () => {
                         padding: "32px",
                         display: "flex",
                         gap: "24px",
+                        alignItems: "center",
                     }}
                 >
                     <div
@@ -171,7 +197,13 @@ const AdminDashboard: React.FC = () => {
                         <Download size={24} />
                     </div>
                     <div>
-                        <span style={{ color: "#9ca3af", display: "block" }}>
+                        <span
+                            style={{
+                                color: "#9ca3af",
+                                display: "block",
+                                fontSize: "0.9rem",
+                            }}
+                        >
                             Total Exports
                         </span>
                         <span style={{ fontSize: "2rem", fontWeight: 800 }}>
@@ -179,6 +211,8 @@ const AdminDashboard: React.FC = () => {
                         </span>
                     </div>
                 </div>
+
+                {/* Metric Card: Total Registered Users */}
                 <div
                     style={{
                         background: "rgba(255, 255, 255, 0.01)",
@@ -187,6 +221,7 @@ const AdminDashboard: React.FC = () => {
                         padding: "32px",
                         display: "flex",
                         gap: "24px",
+                        alignItems: "center",
                     }}
                 >
                     <div
@@ -200,17 +235,61 @@ const AdminDashboard: React.FC = () => {
                         <Users2 size={24} />
                     </div>
                     <div>
-                        <span style={{ color: "#9ca3af", display: "block" }}>
-                            Total Users
+                        <span
+                            style={{
+                                color: "#9ca3af",
+                                display: "block",
+                                fontSize: "0.9rem",
+                            }}
+                        >
+                            Total Roster Users
                         </span>
                         <span style={{ fontSize: "2rem", fontWeight: 800 }}>
                             {stats.userCount}
                         </span>
                     </div>
                 </div>
+
+                {/* Metric Card: Gmail Auth Methods */}
+                <div
+                    style={{
+                        background: "rgba(255, 255, 255, 0.01)",
+                        border: "1px solid rgba(255, 255, 255, 0.05)",
+                        borderRadius: "20px",
+                        padding: "32px",
+                        display: "flex",
+                        gap: "24px",
+                        alignItems: "center",
+                    }}
+                >
+                    <div
+                        style={{
+                            background: "rgba(239, 68, 68, 0.1)",
+                            color: "#ef4444",
+                            padding: "16px",
+                            borderRadius: "14px",
+                        }}
+                    >
+                        <Mail size={24} />
+                    </div>
+                    <div>
+                        <span
+                            style={{
+                                color: "#9ca3af",
+                                display: "block",
+                                fontSize: "0.9rem",
+                            }}
+                        >
+                            Gmail Authentications
+                        </span>
+                        <span style={{ fontSize: "2rem", fontWeight: 800 }}>
+                            {gmailAuthCount}
+                        </span>
+                    </div>
+                </div>
             </div>
 
-            {/* Key Generator */}
+            {/* Key Provisioning Engine */}
             <div
                 style={{
                     maxWidth: "1100px",
@@ -229,7 +308,13 @@ const AdminDashboard: React.FC = () => {
                         marginBottom: "20px",
                     }}
                 >
-                    <h2 style={{ fontSize: "1.2rem", margin: 0 }}>
+                    <h2
+                        style={{
+                            fontSize: "1.2rem",
+                            margin: 0,
+                            fontWeight: 600,
+                        }}
+                    >
                         Access Keys
                     </h2>
                     <button
@@ -242,26 +327,47 @@ const AdminDashboard: React.FC = () => {
                             borderRadius: "8px",
                             fontWeight: 600,
                             cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
                         }}
                     >
                         <Key size={16} /> Generate Key
                     </button>
                 </div>
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    {keysList.map((k) => (
-                        <div
-                            key={k.id}
+                    {keysList.length === 0 ? (
+                        <p
                             style={{
-                                padding: "8px 12px",
-                                background: k.used ? "#374151" : "#06b6d4",
-                                color: k.used ? "#9ca3af" : "#000",
-                                borderRadius: "6px",
-                                fontSize: "0.8rem",
+                                color: "#6b7280",
+                                fontSize: "0.9rem",
+                                margin: 0,
                             }}
                         >
-                            {k.key} {k.used ? "(Used)" : "(Available)"}
-                        </div>
-                    ))}
+                            No dynamic configuration tokens available.
+                        </p>
+                    ) : (
+                        keysList.map((k) => (
+                            <div
+                                key={k.id}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: k.used
+                                        ? "#374151"
+                                        : "rgba(6, 182, 212, 0.2)",
+                                    color: k.used ? "#9ca3af" : "#06b6d4",
+                                    border: k.used
+                                        ? "1px solid transparent"
+                                        : "1px solid rgba(6, 182, 212, 0.3)",
+                                    borderRadius: "6px",
+                                    fontSize: "0.8rem",
+                                    fontWeight: 500,
+                                }}
+                            >
+                                {k.key} {k.used ? "(Used)" : "(Available)"}
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>

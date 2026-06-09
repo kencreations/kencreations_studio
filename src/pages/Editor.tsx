@@ -36,9 +36,9 @@ import { Evaluator, Brush, ADDITION } from "three-bvh-csg";
 
 import { auth, db } from "../firebaseConfig"; // Ensure this import is correct
 import { doc, getDoc } from "firebase/firestore";
-import { AuthModal } from "../components/AuthModal";
 import JSZip from "jszip";
 import { AuthOverlay } from "../components/AuthOverlay";
+import { logExportEvent } from "../utils/metrics";
 
 const Editor: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -140,14 +140,14 @@ const Editor: React.FC = () => {
             },
             {
                 id: "2",
-                text: "CLYDE",
-                font: FONTS[6].url,
-                size: 28.0,
+                text: "NICKNAME",
+                font: FONTS[0].url,
+                size: 18.0,
                 depth: 1,
             },
             {
                 id: "3",
-                text: "Matt Clyde Theodore M. Samonte",
+                text: "Full Name / Tag",
                 font: FONTS[8].url,
                 size: 7,
                 depth: 0.6,
@@ -550,7 +550,7 @@ const Editor: React.FC = () => {
         return `${prefix}_${safeName}.${ext}`;
     };
 
-    const exportSTL = () => {
+    const exportSTL = async () => {
         if (!groupRef.current) return;
 
         const meshes: THREE.Mesh[] = [];
@@ -604,11 +604,14 @@ const Editor: React.FC = () => {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+
+        await logExportEvent("stl");
     };
 
     const handleExport3MF = async () => {
         if (!groupRef.current) return;
         await export3MF(groupRef.current, getDownloadFilename("3mf"));
+        await logExportEvent("3mf");
     };
 
     return (

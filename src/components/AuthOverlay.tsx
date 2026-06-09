@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebaseConfig";
+import { serverTimestamp, setDoc } from "firebase/firestore";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import {
     doc,
@@ -12,11 +13,13 @@ import {
 } from "firebase/firestore";
 import { Sparkles, Key, Lock, AlertCircle } from "lucide-react";
 
-export const AuthOverlay: React.FC<{ onUnlock: () => void, isFreeFeature?: boolean }> = ({
-    onUnlock,
-    isFreeFeature
-}) => {
-    const [step, setStep] = useState<"login" | "key">(auth.currentUser ? "key" : "login");
+export const AuthOverlay: React.FC<{
+    onUnlock: () => void;
+    isFreeFeature?: boolean;
+}> = ({ onUnlock, isFreeFeature }) => {
+    const [step, setStep] = useState<"login" | "key">(
+        auth.currentUser ? "key" : "login",
+    );
     const [key, setKey] = useState("");
     const [error, setError] = useState("");
 
@@ -35,7 +38,21 @@ export const AuthOverlay: React.FC<{ onUnlock: () => void, isFreeFeature?: boole
 
     const handleGoogle = async () => {
         try {
-            await signInWithPopup(auth, new GoogleAuthProvider());
+            const result = await signInWithPopup(
+                auth,
+                new GoogleAuthProvider(),
+            );
+            const user = result.user;
+
+            // Instantly mirrors the account profile to Firestore database collection
+            await setDoc(
+                doc(db, "users", user.uid),
+                {
+                    email: user.email,
+                    createdAt: serverTimestamp(),
+                },
+                { merge: true },
+            );
             if (isFreeFeature) {
                 onUnlock();
             } else {
