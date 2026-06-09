@@ -4,22 +4,20 @@ import {
     doc,
     onSnapshot,
     collection,
-    query,
     getDocs,
     addDoc,
     Timestamp,
 } from "firebase/firestore";
-import { ShieldCheck, Download, Users2, LogOut, Key, Mail } from "lucide-react";
+// Import Cloud Functions to communicate with the Auth backend
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { Download, Users2, LogOut, Key, Mail, Layers } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+// Updated to match your exact database fields from the screenshot
 interface GlobalStats {
     totalExports: number;
-    userCount: number;
-}
-interface UserRow {
-    uid: string;
-    email: string;
-    createdAt?: string;
+    stlCount: number;
+    threeMfCount: number;
 }
 interface AccessKey {
     id: string;
@@ -31,68 +29,79 @@ interface AccessKey {
 const AdminDashboard: React.FC = () => {
     const [stats, setStats] = useState<GlobalStats>({
         totalExports: 0,
-        userCount: 0,
+        stlCount: 0,
+        threeMfCount: 0,
     });
-    const [usersList, setUsersList] = useState<UserRow[]>([]);
+    const [authUsersCount, setAuthUsersCount] = useState<number>(0);
     const [keysList, setKeysList] = useState<AccessKey[]>([]);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
-    // 1. Fetch Data on Load
+    // 1. Fetch Data on Load (With Isolated Real-Time Listeners)
     useEffect(() => {
-        const statsRef = doc(db, "analytics", "global_stats");
+        // Stats Listener - Pointing to your verified admin/metrics document
+        const statsRef = doc(db, "admin", "metrics");
         const unsubscribeStats = onSnapshot(
             statsRef,
             (s) => s.exists() && setStats(s.data() as GlobalStats),
         );
 
-        const fetchData = async () => {
-            try {
-                // Fetch Users
-                const usersSnap = await getDocs(query(collection(db, "users")));
-                setUsersList(
-                    usersSnap.docs.map((d) => ({
-                        uid: d.id,
-                        email: d.data().email || "N/A",
-                        createdAt: d
-                            .data()
-                            .createdAt?.toDate()
-                            .toLocaleDateString(),
-                    })),
-                );
+        // Keys Listener - Made real-time so it updates instantly without page reloads
+        const keysRef = collection(db, "valid_keys");
+        const unsubscribeKeys = onSnapshot(keysRef, (snapshot) => {
+            setKeysList(
+                snapshot.docs.map(
+                    (d) => ({ id: d.id, ...d.data() }) as AccessKey,
+                ),
+            );
+        });
 
-                // Fetch Keys
-                const keysSnap = await getDocs(collection(db, "valid_keys"));
-                setKeysList(
-                    keysSnap.docs.map(
-                        (d) => ({ id: d.id, ...d.data() }) as AccessKey,
-                    ),
+        // Isolated Cloud Function Fetch - If this fails, it won't block your keys or stats!
+        const fetchAuthTelemetry = async () => {
+            try {
+                const functions = getFunctions();
+                const getAuthTelemetry = httpsCallable(
+                    functions,
+                    "getAuthenticationTelemetry",
                 );
+                const response = await getAuthTelemetry();
+                const data = response.data as { authUserCount: number };
+
+                setAuthUsersCount(data.authUserCount);
             } catch (error) {
-                console.error("Error loading administrative telemetry:", error);
+                console.error(
+                    "Cloud Function failed/un-deployed, but Firestore data loaded successfully:",
+                    error,
+                );
             } finally {
                 setLoading(false);
             }
         };
-        fetchData();
-        return () => unsubscribeStats();
+
+        fetchAuthTelemetry();
+
+        // Clean up all listeners on unmount
+        return () => {
+            unsubscribeStats();
+            unsubscribeKeys();
+        };
     }, []);
+
+    // 2. Fixed Key Generator Logic
 
     const handleGenerateKey = async () => {
         const newKey =
             "KC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+        // FIX: Removed the accidental double collection() wrapper
         await addDoc(collection(db, "valid_keys"), {
             key: newKey,
             used: false,
             createdAt: Timestamp.now(),
         });
+
         window.location.reload(); // Quick refresh to show new key
     };
-
-    // Calculate Gmail Auth accounts reactively from the user roster
-    const gmailAuthCount = usersList.filter((user) =>
-        user.email.toLowerCase().endsWith("@gmail.com"),
-    ).length;
 
     if (loading) {
         return (
@@ -164,25 +173,25 @@ const AdminDashboard: React.FC = () => {
                 </button>
             </div>
 
-            {/* Metrics Dashboard Matrices */}
+            {/* Metrics Dashboard Grid */}
             <div
                 style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                     gap: "24px",
                     maxWidth: "1100px",
                     margin: "0 auto 48px auto",
                 }}
             >
-                {/* Metric Card: Total Exports */}
+                {/* Total Exports */}
                 <div
                     style={{
                         background: "rgba(255, 255, 255, 0.01)",
                         border: "1px solid rgba(255, 255, 255, 0.05)",
                         borderRadius: "20px",
-                        padding: "32px",
+                        padding: "24px",
                         display: "flex",
-                        gap: "24px",
+                        gap: "20px",
                         alignItems: "center",
                     }}
                 >
@@ -190,37 +199,37 @@ const AdminDashboard: React.FC = () => {
                         style={{
                             background: "rgba(6, 182, 212, 0.1)",
                             color: "#06b6d4",
-                            padding: "16px",
+                            padding: "12px",
                             borderRadius: "14px",
                         }}
                     >
-                        <Download size={24} />
+                        <Download size={20} />
                     </div>
                     <div>
                         <span
                             style={{
                                 color: "#9ca3af",
                                 display: "block",
-                                fontSize: "0.9rem",
+                                fontSize: "0.85rem",
                             }}
                         >
                             Total Exports
                         </span>
-                        <span style={{ fontSize: "2rem", fontWeight: 800 }}>
+                        <span style={{ fontSize: "1.75rem", fontWeight: 800 }}>
                             {stats.totalExports}
                         </span>
                     </div>
                 </div>
 
-                {/* Metric Card: Total Registered Users */}
+                {/* STL Count Breakdown */}
                 <div
                     style={{
                         background: "rgba(255, 255, 255, 0.01)",
                         border: "1px solid rgba(255, 255, 255, 0.05)",
                         borderRadius: "20px",
-                        padding: "32px",
+                        padding: "24px",
                         display: "flex",
-                        gap: "24px",
+                        gap: "20px",
                         alignItems: "center",
                     }}
                 >
@@ -228,37 +237,75 @@ const AdminDashboard: React.FC = () => {
                         style={{
                             background: "rgba(16, 185, 129, 0.1)",
                             color: "#10b981",
-                            padding: "16px",
+                            padding: "12px",
                             borderRadius: "14px",
                         }}
                     >
-                        <Users2 size={24} />
+                        <Layers size={20} />
                     </div>
                     <div>
                         <span
                             style={{
                                 color: "#9ca3af",
                                 display: "block",
-                                fontSize: "0.9rem",
+                                fontSize: "0.85rem",
                             }}
                         >
-                            Total Roster Users
+                            STL Files
                         </span>
-                        <span style={{ fontSize: "2rem", fontWeight: 800 }}>
-                            {stats.userCount}
+                        <span style={{ fontSize: "1.75rem", fontWeight: 800 }}>
+                            {stats.stlCount}
                         </span>
                     </div>
                 </div>
 
-                {/* Metric Card: Gmail Auth Methods */}
+                {/* 3MF Count Breakdown */}
                 <div
                     style={{
                         background: "rgba(255, 255, 255, 0.01)",
                         border: "1px solid rgba(255, 255, 255, 0.05)",
                         borderRadius: "20px",
-                        padding: "32px",
+                        padding: "24px",
                         display: "flex",
-                        gap: "24px",
+                        gap: "20px",
+                        alignItems: "center",
+                    }}
+                >
+                    <div
+                        style={{
+                            background: "rgba(251, 191, 36, 0.1)",
+                            color: "#fbbf24",
+                            padding: "12px",
+                            borderRadius: "14px",
+                        }}
+                    >
+                        <Layers size={20} />
+                    </div>
+                    <div>
+                        <span
+                            style={{
+                                color: "#9ca3af",
+                                display: "block",
+                                fontSize: "0.85rem",
+                            }}
+                        >
+                            3MF Files
+                        </span>
+                        <span style={{ fontSize: "1.75rem", fontWeight: 800 }}>
+                            {stats.threeMfCount}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Live Auth Tab Account Counts */}
+                <div
+                    style={{
+                        background: "rgba(255, 255, 255, 0.01)",
+                        border: "1px solid rgba(255, 255, 255, 0.05)",
+                        borderRadius: "20px",
+                        padding: "24px",
+                        display: "flex",
+                        gap: "20px",
                         alignItems: "center",
                     }}
                 >
@@ -266,24 +313,24 @@ const AdminDashboard: React.FC = () => {
                         style={{
                             background: "rgba(239, 68, 68, 0.1)",
                             color: "#ef4444",
-                            padding: "16px",
+                            padding: "12px",
                             borderRadius: "14px",
                         }}
                     >
-                        <Mail size={24} />
+                        <Users2 size={20} />
                     </div>
                     <div>
                         <span
                             style={{
                                 color: "#9ca3af",
                                 display: "block",
-                                fontSize: "0.9rem",
+                                fontSize: "0.85rem",
                             }}
                         >
-                            Gmail Authentications
+                            Total Auth Profiles
                         </span>
-                        <span style={{ fontSize: "2rem", fontWeight: 800 }}>
-                            {gmailAuthCount}
+                        <span style={{ fontSize: "1.75rem", fontWeight: 800 }}>
+                            {authUsersCount}
                         </span>
                     </div>
                 </div>
@@ -344,7 +391,7 @@ const AdminDashboard: React.FC = () => {
                                 margin: 0,
                             }}
                         >
-                            No dynamic configuration tokens available.
+                            No dynamic tokens available.
                         </p>
                     ) : (
                         keysList.map((k) => (
