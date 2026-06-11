@@ -44,18 +44,18 @@ export const RAW_TOOLS: ToolItem[] = [
         icon: <LayoutGrid size={24} strokeWidth={1.5} />,
         color: "#10b981",
         status: "stable",
-        priceHint: "Pro Plan",
+        priceHint: "Free",
     },
     {
         ref: "003",
-        name: "Rounded ID Tag",
+        name: "Bag Tag",
         description:
             "Dynamic typographic configurations matched over parametric corner configurations for modern looks.",
-        path: "/editor/id-name-tag-3",
+        path: "/editor/bag-tag",
         icon: <Box size={24} strokeWidth={1.5} />,
         color: "#8b5cf6",
-        status: "maintenance",
-        priceHint: "Pro Plan",
+        status: "beta",
+        priceHint: "Free",
     },
     {
         ref: "003-b",
@@ -138,16 +138,14 @@ const Home: React.FC = () => {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-            }}
-        >
+            }}>
             {/* Header Content Frame */}
             <div
                 style={{
                     textAlign: "center",
                     maxWidth: "640px",
                     marginBottom: "72px",
-                }}
-            >
+                }}>
                 <div
                     style={{
                         display: "inline-flex",
@@ -161,8 +159,7 @@ const Home: React.FC = () => {
                         color: "#9ca3af",
                         fontWeight: 500,
                         marginBottom: "24px",
-                    }}
-                >
+                    }}>
                     <Zap size={14} color="#eab308" /> Studio Cloud Platform
                     Engine Active
                 </div>
@@ -176,8 +173,7 @@ const Home: React.FC = () => {
                             "linear-gradient(135deg, #ffffff 30%, #9ca3af 100%)",
                         WebkitBackgroundClip: "text",
                         WebkitTextFillColor: "transparent",
-                    }}
-                >
+                    }}>
                     KenCreations Studio
                 </h1>
                 <p
@@ -187,8 +183,7 @@ const Home: React.FC = () => {
                         lineHeight: 1.6,
                         margin: 0,
                         fontWeight: 400,
-                    }}
-                >
+                    }}>
                     Professional toolsets for dynamic 3D model generation.
                     Adjust specifications, evaluate slices, and download
                     manufacturing-grade fabrication geometries directly.
@@ -203,8 +198,7 @@ const Home: React.FC = () => {
                     gap: "24px",
                     width: "100%",
                     maxWidth: "1100px",
-                }}
-            >
+                }}>
                 {uniqueTools.map((tool) => {
                     const status = STATUS_CONFIG[tool.status];
                     const isDisabled =
@@ -245,8 +239,7 @@ const Home: React.FC = () => {
                                     e.currentTarget.style.transform =
                                         "translateY(0)";
                                 }
-                            }}
-                        >
+                            }}>
                             {/* Card Top Row Badges */}
                             <div
                                 style={{
@@ -254,8 +247,7 @@ const Home: React.FC = () => {
                                     justifyContent: "space-between",
                                     alignItems: "flex-start",
                                     marginBottom: "24px",
-                                }}
-                            >
+                                }}>
                                 <div
                                     style={{
                                         background: `${tool.color}10`,
@@ -266,8 +258,7 @@ const Home: React.FC = () => {
                                         display: "flex",
                                         alignItems: "center",
                                         justifyContent: "center",
-                                    }}
-                                >
+                                    }}>
                                     {tool.icon}
                                 </div>
 
@@ -282,8 +273,7 @@ const Home: React.FC = () => {
                                         fontSize: "0.72rem",
                                         fontWeight: 600,
                                         letterSpacing: "0.02em",
-                                    }}
-                                >
+                                    }}>
                                     {status.label}
                                 </div>
                             </div>
@@ -295,16 +285,14 @@ const Home: React.FC = () => {
                                     alignItems: "baseline",
                                     gap: "10px",
                                     margin: "0 0 8px 0",
-                                }}
-                            >
+                                }}>
                                 <h3
                                     style={{
                                         margin: 0,
                                         fontSize: "1.2rem",
                                         fontWeight: 600,
                                         color: "#f3f4f6",
-                                    }}
-                                >
+                                    }}>
                                     {tool.name}
                                 </h3>
                                 {tool.priceHint && !isDisabled && (
@@ -322,8 +310,7 @@ const Home: React.FC = () => {
                                             padding: "1px 6px",
                                             borderRadius: "4px",
                                             fontWeight: 500,
-                                        }}
-                                    >
+                                        }}>
                                         {tool.priceHint}
                                     </span>
                                 )}
@@ -336,8 +323,7 @@ const Home: React.FC = () => {
                                     fontSize: "0.9rem",
                                     lineHeight: 1.5,
                                     flexGrow: 1,
-                                }}
-                            >
+                                }}>
                                 {tool.description}
                             </p>
 
@@ -350,8 +336,7 @@ const Home: React.FC = () => {
                                     color: isDisabled ? "#6b7280" : tool.color,
                                     fontSize: "0.85rem",
                                     fontWeight: 500,
-                                }}
-                            >
+                                }}>
                                 {tool.status === "maintenance" && (
                                     <span
                                         style={{
@@ -359,8 +344,7 @@ const Home: React.FC = () => {
                                             alignItems: "center",
                                             gap: "6px",
                                             color: "#ef4444",
-                                        }}
-                                    >
+                                        }}>
                                         <AlertTriangle size={14} /> Under
                                         Construction
                                     </span>
@@ -371,8 +355,7 @@ const Home: React.FC = () => {
                                             display: "inline-flex",
                                             alignItems: "center",
                                             gap: "6px",
-                                        }}
-                                    >
+                                        }}>
                                         Deployment Scheduled
                                     </span>
                                 )}
@@ -382,8 +365,7 @@ const Home: React.FC = () => {
                                             display: "inline-flex",
                                             alignItems: "center",
                                             gap: "4px",
-                                        }}
-                                    >
+                                        }}>
                                         Initialize Engine{" "}
                                         <ChevronRight size={14} />
                                     </span>
@@ -394,8 +376,7 @@ const Home: React.FC = () => {
                                             display: "inline-flex",
                                             alignItems: "center",
                                             gap: "4px",
-                                        }}
-                                    >
+                                        }}>
                                         Launch Sandbox Preview{" "}
                                         <ChevronRight size={14} />
                                     </span>
@@ -410,8 +391,7 @@ const Home: React.FC = () => {
                         <Link
                             key={tool.ref}
                             to={tool.path}
-                            style={{ textDecoration: "none" }}
-                        >
+                            style={{ textDecoration: "none" }}>
                             {CardInnerContent}
                         </Link>
                     );
@@ -426,8 +406,7 @@ const Home: React.FC = () => {
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
-                }}
-            >
+                }}>
                 <ShieldCheck size={14} /> Cryptographic client-side execution
                 environment. All file compilations processed safely in-browser.
             </div>

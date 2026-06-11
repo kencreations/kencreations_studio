@@ -30,7 +30,7 @@ export const BuildPlatePreview: React.FC<BuildPlatePreviewProps> = ({
     const [currentPlate, setCurrentPlate] = useState(0);
 
     const isDesign2 = location.pathname.includes("id-name-tag-2") || location.pathname === "/design2";
-    const isDesign3 = location.pathname.includes("id-name-tag-3") || location.pathname === "/design3";
+    const isDesign3 = location.pathname.includes("bag-tag") || location.pathname.includes("id-name-tag-3") || location.pathname === "/design3";
     const isDesign4 = location.pathname.includes("id-name-tag-4") || location.pathname === "/design4";
     const isPencilTopper = location.pathname.includes("pencil-topper") || location.pathname === "/pencil";
 

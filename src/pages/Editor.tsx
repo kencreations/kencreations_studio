@@ -50,7 +50,7 @@ const Editor: React.FC = () => {
 
     const isPencilTopper = id === "pencil-topper";
     const isDesign2 = id === "id-name-tag-2";
-    const isDesign3 = id === "id-name-tag-3";
+    const isDesign3 = id === "bag-tag" || id === "id-name-tag-3";
     const isDesign4 = id === "id-name-tag-4";
 
     const location = useLocation();
@@ -219,14 +219,14 @@ const Editor: React.FC = () => {
         lines: [
             {
                 id: "1",
-                text: "KURT",
+                text: "NICKNAME",
                 font: FONTS[14].url, // Arial Rounded Bold
                 size: 15,
                 depth: 1.5,
             },
             {
                 id: "2",
-                text: "Kurt C. Alcantara",
+                text: "Full Name / Tag",
                 font: FONTS[13].url, // Arial Rounded Bold/Medium
                 size: 7.0,
                 depth: 1.0,
@@ -302,17 +302,21 @@ const Editor: React.FC = () => {
         },
     };
 
-    const [state, setState] = useState<AppState>(
-        isPencilTopper
-            ? pencilTopperState
-            : isDesign4
-              ? design4State
-              : isDesign2
-                ? design2State
-                : isDesign3
-                  ? design3State
-                  : design1State,
-    );
+    const initialState = isPencilTopper
+        ? pencilTopperState
+        : isDesign4
+          ? design4State
+          : isDesign2
+            ? design2State
+            : isDesign3
+              ? design3State
+              : design1State;
+
+    const [state, setState] = useState<AppState>(initialState);
+
+    useEffect(() => {
+        setState(initialState);
+    }, [id]);
 
     const [bounds, setBounds] = useState({ x: 75, y: 40, z: 4.5 });
     const groupRef = useRef<THREE.Group>(null);

@@ -12,18 +12,11 @@ function App() {
                 <Route path="/" element={<Home />} />
 
                 <Route
-                    path="/editor/id-name-tag"
-                    element={<Editor />}
-                />
-                <Route
                     path="/editor/fidget-clicker"
                     element={<FidgetClickerEditor />}
                 />
                 <Route path="/editor/keycap-maker" element={<KeycapEditor />} />
-                <Route
-                    path="/editor/:id"
-                    element={<Editor />}
-                />
+                <Route path="/editor/:id" element={<Editor />} />
                 <Route path="/admin" element={<AdminDashboard />} />
             </Routes>
         </BrowserRouter>

@@ -6,7 +6,10 @@ import { FontLoader, Font } from "three/examples/jsm/loaders/FontLoader.js";
 import { Evaluator, Brush, SUBTRACTION } from "three-bvh-csg";
 import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { createTextGeometryWithSpacing } from "../utils/textEngine";
-import { createTextShapesWithSpacing, offsetShapes } from "../utils/textContour";
+import {
+    createTextShapesWithSpacing,
+    offsetShapes,
+} from "../utils/textContour";
 import type { AppState } from "../types";
 import { useDebounce } from "../hooks/useDebounce";
 
@@ -29,7 +32,11 @@ const Generator: React.FC<SceneProps> = ({
     bounds,
 }) => {
     const clippingPlanes = React.useMemo(() => {
-        if (activeLayer === undefined || totalLayers === undefined || activeLayer >= totalLayers) {
+        if (
+            activeLayer === undefined ||
+            totalLayers === undefined ||
+            activeLayer >= totalLayers
+        ) {
             return [];
         }
         const baseThickness = state.shape.baseThickness || 2.0;
@@ -47,7 +54,8 @@ const Generator: React.FC<SceneProps> = ({
         const s = debouncedState;
         const generate = async () => {
             const fontLoader = new FontLoader();
-            const { TTFLoader } = await import("three/examples/jsm/loaders/TTFLoader.js");
+            const { TTFLoader } =
+                await import("three/examples/jsm/loaders/TTFLoader.js");
             const ttfLoader = new TTFLoader();
             try {
                 const line = s.lines[0];
@@ -83,7 +91,7 @@ const Generator: React.FC<SceneProps> = ({
                     textThickness,
                     line.letterSpacing || 0,
                 );
-                
+
                 rawText.computeBoundingBox();
                 const bounds = rawText.boundingBox!;
                 const tw = bounds.max.x - bounds.min.x;
@@ -100,7 +108,7 @@ const Generator: React.FC<SceneProps> = ({
                 setTextGeo(weldedText);
 
                 // 2. Contoured Outline Backing Base Geometry (using clipper-lib)
-                const outlineWidth = s.shape.padding || 9.5;
+                const outlineWidth = s.shape.padding || 2;
                 const baseThickness = s.shape.baseThickness || 12.8;
 
                 // Generate exact 2D outline contours matching characters
@@ -108,7 +116,7 @@ const Generator: React.FC<SceneProps> = ({
                     line.text,
                     loadedFont,
                     line.size || 23,
-                    line.letterSpacing || 0
+                    line.letterSpacing || 0,
                 );
 
                 const baseShapes = offsetShapes(textShapes, outlineWidth);
@@ -123,10 +131,10 @@ const Generator: React.FC<SceneProps> = ({
                 } else {
                     // Fallback
                     const shape = new THREE.Shape();
-                    shape.moveTo(-tw/2, -th/2);
-                    shape.lineTo(tw/2, -th/2);
-                    shape.lineTo(tw/2, th/2);
-                    shape.lineTo(-tw/2, th/2);
+                    shape.moveTo(-tw / 2, -th / 2);
+                    shape.lineTo(tw / 2, -th / 2);
+                    shape.lineTo(tw / 2, th / 2);
+                    shape.lineTo(-tw / 2, th / 2);
                     shape.closePath();
                     rawBase = new THREE.ExtrudeGeometry(shape, {
                         depth: baseThickness,
@@ -152,7 +160,7 @@ const Generator: React.FC<SceneProps> = ({
                     holeRadius,
                     tw + outlineWidth * 2 + 40, // ensure clean cut on outer boundaries
                     32,
-                    1
+                    1,
                 );
                 // Rotate cylinder to run parallel to the X-axis
                 cylinderGeo.rotateZ(Math.PI / 2);
@@ -169,11 +177,13 @@ const Generator: React.FC<SceneProps> = ({
                 const subtractedBase = evaluator.evaluate(
                     baseBrush,
                     cylinderBrush,
-                    SUBTRACTION
+                    SUBTRACTION,
                 );
-                
+
                 // Weld base vertices for a perfect manifold slice
-                const weldedBase = BufferGeometryUtils.mergeVertices(subtractedBase.geometry);
+                const weldedBase = BufferGeometryUtils.mergeVertices(
+                    subtractedBase.geometry,
+                );
                 setBaseGeo(weldedBase);
 
                 // Notify parent of outer bounding dimensions
@@ -199,7 +209,12 @@ const Generator: React.FC<SceneProps> = ({
         <Center disableZ>
             <group ref={meshRef}>
                 {baseGeo && (
-                    <mesh geometry={baseGeo} name="base" castShadow receiveShadow>
+                    <mesh
+                        geometry={baseGeo}
+                        name="base"
+                        castShadow
+                        receiveShadow
+                    >
                         <meshStandardMaterial
                             color={debouncedState.baseColor}
                             roughness={0.3}
@@ -209,7 +224,12 @@ const Generator: React.FC<SceneProps> = ({
                     </mesh>
                 )}
                 {textGeo && (
-                    <mesh geometry={textGeo} name="text" castShadow receiveShadow>
+                    <mesh
+                        geometry={textGeo}
+                        name="text"
+                        castShadow
+                        receiveShadow
+                    >
                         <meshStandardMaterial
                             color={debouncedState.textColor}
                             roughness={0.3}
@@ -243,14 +263,14 @@ const PrintNozzle: React.FC<NozzleProps> = ({
     const zHeight = bounds?.z || 4.5;
     const width = bounds?.x || 75;
     const height = bounds?.y || 40;
-    
+
     const nozzleZ = floorZ + (activeLayer / totalLayers) * zHeight;
     const t = (slicerPathProgress || 100) / 100;
-    
+
     // FDM Toolpath Path Generation: 30% outer shell, 70% infill raster
     let nozzleX = 0;
     let nozzleY = 0;
-    
+
     if (t < 0.3) {
         const perimeterT = t / 0.3;
         const angle = perimeterT * Math.PI * 2;
@@ -261,12 +281,16 @@ const PrintNozzle: React.FC<NozzleProps> = ({
         const numScans = 10;
         const scanIndex = Math.floor(infillT * numScans);
         const scanLineT = (infillT * numScans) % 1;
-        const currentX = -width / 2 + (scanIndex / Math.max(1, numScans - 1)) * width;
+        const currentX =
+            -width / 2 + (scanIndex / Math.max(1, numScans - 1)) * width;
         const startY = -height / 2;
         const endY = height / 2;
-        
+
         nozzleX = currentX;
-        nozzleY = scanIndex % 2 === 0 ? startY + scanLineT * (endY - startY) : endY - scanLineT * (endY - startY);
+        nozzleY =
+            scanIndex % 2 === 0
+                ? startY + scanLineT * (endY - startY)
+                : endY - scanLineT * (endY - startY);
     }
 
     return (
@@ -274,12 +298,22 @@ const PrintNozzle: React.FC<NozzleProps> = ({
             {/* The heated print head tip (cone) */}
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 8]}>
                 <coneGeometry args={[3, 16, 16]} />
-                <meshStandardMaterial color="#475569" roughness={0.5} metalness={0.8} />
+                <meshStandardMaterial
+                    color="#475569"
+                    roughness={0.5}
+                    metalness={0.8}
+                />
             </mesh>
             {/* Glowing brass tip */}
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 0.5]}>
                 <coneGeometry args={[0.8, 1, 12]} />
-                <meshStandardMaterial color="#ca8a04" roughness={0.2} metalness={0.9} emissive="#caca24" emissiveIntensity={0.6} />
+                <meshStandardMaterial
+                    color="#ca8a04"
+                    roughness={0.2}
+                    metalness={0.9}
+                    emissive="#caca24"
+                    emissiveIntensity={0.6}
+                />
             </mesh>
             {/* Extremely hot heated filament node */}
             <mesh position={[0, 0, 0]}>
@@ -296,7 +330,11 @@ const ScenePencil: React.FC<SceneProps> = (props) => {
     const floorZ = -props.state.shape.baseThickness / 2;
 
     return (
-        <Canvas shadows camera={{ position: [0, -80, 80], fov: 45 }} gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }}>
+        <Canvas
+            shadows
+            camera={{ position: [0, -80, 80], fov: 45 }}
+            gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }}
+        >
             <ambientLight intensity={0.6} />
             <directionalLight
                 position={[10, -10, 30]}
@@ -308,15 +346,16 @@ const ScenePencil: React.FC<SceneProps> = (props) => {
 
             <Generator {...props} />
 
-            {props.activeLayer !== undefined && props.totalLayers !== undefined && (
-                <PrintNozzle
-                    bounds={props.bounds}
-                    activeLayer={props.activeLayer}
-                    totalLayers={props.totalLayers}
-                    slicerPathProgress={props.slicerPathProgress}
-                    floorZ={floorZ}
-                />
-            )}
+            {props.activeLayer !== undefined &&
+                props.totalLayers !== undefined && (
+                    <PrintNozzle
+                        bounds={props.bounds}
+                        activeLayer={props.activeLayer}
+                        totalLayers={props.totalLayers}
+                        slicerPathProgress={props.slicerPathProgress}
+                        floorZ={floorZ}
+                    />
+                )}
 
             {/* Floor to receive shadow */}
             <mesh position={[0, 0, floorZ - 0.05]} receiveShadow>
@@ -345,6 +384,3 @@ const ScenePencil: React.FC<SceneProps> = (props) => {
 
 export { Generator as GeneratorPencil };
 export default ScenePencil;
-
-
-

@@ -216,6 +216,10 @@ const Generator4: React.FC<SceneProps> = ({
 // 3. MAIN SCENE WRAPPER
 // --------------------------------------------------------
 const Scene4: React.FC<SceneProps> = (props) => {
+    const baseThickness = props.state.shape.baseThickness || 3.3;
+    const topBorder = props.state.shape.topBorder || 1.5;
+    const floorZ = -(baseThickness + topBorder) / 2;
+
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
             <Canvas
@@ -243,14 +247,13 @@ const Scene4: React.FC<SceneProps> = (props) => {
                 </group>
 
                 <OrbitControls
-                    enableDamping
-                    dampingFactor={0.05}
-                    maxPolarAngle={Math.PI / 2 + 0.1}
+                    makeDefault
                     minDistance={30}
                     maxDistance={250}
                 />
                 <Grid
-                    position={[0, 0, -2]}
+                    position={[0, 0, floorZ - 0.05]}
+                    rotation={[Math.PI / 2, 0, 0]}
                     args={[180, 180]}
                     cellSize={10}
                     cellThickness={1.0}

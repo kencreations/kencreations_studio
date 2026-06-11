@@ -650,7 +650,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     {isPencilTopper
                         ? "Pencil Name Topper"
                         : isDesign3
-                          ? "ID Name Tag (Design 3)"
+                          ? "Bag Tag"
                           : isDesign2
                             ? "ID Name Tag (Design 2)"
                             : "Id Name Tag"}
