@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
     Download,
     Box,
@@ -8,8 +8,27 @@ import {
     Monitor,
 } from "lucide-react";
 import "./App.css"; // Make sure this matches your CSS file name!
+import mockupImg from "./1.png";
 
 export default function LandingPage() {
+    const [downloadUrl, setDownloadUrl] = useState("");
+    useEffect(() => {
+        fetch(
+            "https://api.github.com/repos/kencreations/kencreations_studioV2/releases/latest",
+        )
+            .then((response) => response.json())
+            .then((data) => {
+                // Find the asset that ends with .exe
+                const exeAsset = data.assets?.find((asset: any) =>
+                    asset.name.endsWith(".exe"),
+                );
+                if (exeAsset) {
+                    setDownloadUrl(exeAsset.browser_download_url);
+                }
+            })
+            .catch((error) => console.error("Error fetching release:", error));
+    }, []);
+
     return (
         <div className="landing-container">
             {/* ── NAVIGATION ── */}
@@ -18,14 +37,23 @@ export default function LandingPage() {
                     <Box className="icon-teal" size={28} />
                     <span className="logo-text">KenCreations Studio</span>
                 </div>
-                <button className="btn-primary flex-btn">
-                    <Download size={16} /> Download for Windows
-                </button>
+                {/* Updated Nav Button */}
+                <a
+                    href={downloadUrl || "#"}
+                    className="btn-primary flex-btn"
+                    style={{
+                        textDecoration: "none",
+                        opacity: downloadUrl ? 1 : 0.6,
+                        pointerEvents: downloadUrl ? "auto" : "none",
+                    }}>
+                    <Download size={16} />{" "}
+                    {downloadUrl ? "Download for Windows" : "Fetching..."}
+                </a>
             </nav>
 
             {/* ── HERO SECTION ── */}
             <header className="hero-section">
-                <div className="version-badge">v1.0 is officially LIVE 🚀</div>
+                <div className="version-badge">v1.1 is officially LIVE 🚀</div>
                 <h1 className="hero-title">
                     The future of your <br />
                     <span className="text-gradient">3D printing workflow.</span>
@@ -36,16 +64,45 @@ export default function LandingPage() {
                     library of parametric 3D tools.
                 </p>
                 <div className="hero-actions">
-                    <button className="btn-primary btn-large flex-btn">
-                        <Download size={20} /> Download .EXE (64-bit)
-                    </button>
+                    {/* Updated Hero Button */}
+                    <a
+                        href={downloadUrl || "#"}
+                        className="btn-primary btn-large flex-btn"
+                        style={{
+                            textDecoration: "none",
+                            opacity: downloadUrl ? 1 : 0.6,
+                            pointerEvents: downloadUrl ? "auto" : "none",
+                        }}>
+                        <Download size={20} />{" "}
+                        {downloadUrl
+                            ? "Download .EXE (64-bit)"
+                            : "Fetching Latest Version..."}
+                    </a>
                 </div>
 
-                <div className="hero-mockup">
-                    <Monitor size={48} className="icon-slate" />
-                    <span className="mockup-text">
-                        Insert App UI Graphic Here
-                    </span>
+                {/* ── CUSTOM APP WINDOW MOCKUP ── */}
+                <div className="custom-app-window">
+                    {/* Top Title Bar */}
+                    <div className="app-titlebar">
+                        <div className="traffic-lights">
+                            <span className="dot close-dot"></span>
+                            <span className="dot min-dot"></span>
+                            <span className="dot max-dot"></span>
+                        </div>
+                        <div className="app-title">
+                            KenCreations Studio - Pro Edition
+                        </div>
+                    </div>
+
+                    {/* App Content Area */}
+                    <div className="app-content">
+                        {/* You will put your clean app screenshot here! */}
+                        <img
+                            src={mockupImg}
+                            alt="KenCreations Studio Interface"
+                            className="app-screenshot"
+                        />
+                    </div>
                 </div>
             </header>
 
@@ -102,11 +159,27 @@ export default function LandingPage() {
                         <p className="subtitle">
                             Standard tools for everyday prints.
                         </p>
-                        <div className="price-block">
-                            <span className="price">₱499</span>
-                            <span className="period"> /mo</span>
+
+                        <div className="pricing-tiers">
+                            <div className="tier">
+                                <span>1-Month</span>
+                                <strong>₱499</strong>
+                            </div>
+                            <div className="tier">
+                                <span>6-Months</span>
+                                <strong>₱2,499</strong>
+                            </div>
+                            <div className="tier">
+                                <span>12-Months</span>
+                                <strong>₱3,999</strong>
+                            </div>
+                            <div className="tier tier-lifetime">
+                                <span>Lifetime</span>
+                                <strong>₱5,999</strong>
+                            </div>
                         </div>
-                        <ul className="feature-list">
+
+                        <ul className="feature-list mt-auto">
                             <li>
                                 <CheckCircle size={16} className="icon-teal" />{" "}
                                 Commercial selling rights
@@ -121,7 +194,7 @@ export default function LandingPage() {
                             </li>
                         </ul>
                         <button className="btn-secondary w-full">
-                            Also available for ₱5,999 / Lifetime
+                            Choose Core Plan
                         </button>
                     </div>
 
@@ -174,7 +247,7 @@ export default function LandingPage() {
                             </li>
                             <li>
                                 <CheckCircle size={16} className="icon-teal" />{" "}
-                                Includes 6-Months Core
+                                Includes 1-Months Core
                             </li>
                         </ul>
                         <button className="btn-secondary w-full">
