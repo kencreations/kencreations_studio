@@ -11,15 +11,37 @@ THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 export interface ClickerState {
-    style: "classic" | "slim" | "elevated" | "ergonomic" | "custom" | "svg"; // Add "svg"
+    style: "classic" | "slim" | "elevated" | "ergonomic" | "custom" | "svg";
     customStlUrl: string | null;
     customStlName: string | null;
-    customSvgString: string | null; // NEW
-    customSvgName: string | null; // NEW
-    svgScale: number; // NEW
+
+    customSvgString: string | null;
+    customSvgName: string | null;
+
+    customImageUrl: string | null;
+    customImageName: string | null;
+
+    svgScale: number;
+    svgMode: "none" | "keychain" | "clicker";
+    svgExtrusion: number;
+
+    // Keychain Mode
+    keychainLoopRadius: number;
+    keychainLoopTube: number;
+    keychainAttachOffset: number;
+
+    // Clicker Mode (Cherry MX)
+    clickerWallThickness: number;
+    clickerTolerance: number;
+    clickerDepth: number;
+
     baseColor: string;
     hookColor: string;
+
     hookEnabled: boolean;
     hookStyle: "ring" | "elevated" | "carabiner" | "tab" | "connector";
     hookPosition: "top" | "bottom" | "left" | "right";
@@ -30,8 +52,8 @@ export interface ClickerState {
     hookOffsetX: number;
     hookOffsetY: number;
     hookOffsetZ: number;
+
     logoRemoved: boolean;
-    // Legacy cover plate fields kept for backwards compat (unused)
     logoCoverEnabled: boolean;
     logoCoverWidth: number;
     logoCoverHeight: number;
@@ -42,6 +64,11 @@ export interface ClickerState {
     logoCoverRotX: number;
     logoCoverRotY: number;
     logoCoverRotZ: number;
+}
+
+interface SvgPathMesh {
+    geo: THREE.BufferGeometry;
+    color: string;
 }
 
 interface SceneProps {
@@ -55,79 +82,361 @@ interface SceneProps {
     isSlicing?: boolean;
 }
 
-/**
- * Flattens the embossed logo region on the clicker base geometry.
- *
- * Strategy: After centering the geometry, the model's logo relief sits on
- * the front face (Y > 0 side). We:
- *  1. Sample all vertices on that face by filtering Y close to bbox.max.y.
- *  2. Determine the median Y of those surface vertices (the "wall plane").
- *  3. For every vertex within a tight XZ bounding box matching the logo
- *     footprint that protrudes PAST the wall plane, snap it back to the
- *     wall Y — erasing the relief.
- *  4. Recompute normals so shading is clean.
- *
- * Note: The exact bounds below are tuned for the elevated-base STL.
- * For custom uploads the function gracefully degrades (no crash).
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// CHERRY MX CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+const MX_BODY_SIZE   = 13.8;  // switch body square (mm)
+const MX_STEM_HORIZ  = 4.4;   // cross fin width (mm)
+const MX_STEM_VERT   = 1.3;   // cross fin thickness (mm)
+const FLOOR_THICKNESS = 2.0;  // housing floor plate depth (mm)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGO FLATTEN UTILITY
+// ─────────────────────────────────────────────────────────────────────────────
 function flattenLogoRegion(geometry: THREE.BufferGeometry): void {
     const posAttr = geometry.attributes.position as THREE.BufferAttribute;
     if (!posAttr) return;
-
     geometry.computeBoundingBox();
     const bbox = geometry.boundingBox!;
     const bboxSize = new THREE.Vector3();
     bbox.getSize(bboxSize);
     const bboxCenter = new THREE.Vector3();
     bbox.getCenter(bboxCenter);
-
-    // Detect the "front face" wall Y (max Y side of the body, above centre)
-    // We'll compute the median Y of all vertices that are near the outer
-    // Y surface so we know the wall plane even if the model changes slightly.
     const ySamples: number[] = [];
     const v = new THREE.Vector3();
     for (let i = 0; i < posAttr.count; i++) {
         v.fromBufferAttribute(posAttr, i);
-        // Vertices near the top/front: Y within top 15% of bbox height
-        if (v.y > bbox.max.y - bboxSize.y * 0.15) {
-            ySamples.push(v.y);
-        }
+        if (v.y > bbox.max.y - bboxSize.y * 0.15) ySamples.push(v.y);
     }
-    if (ySamples.length === 0) return;
-
+    if (!ySamples.length) return;
     ySamples.sort((a, b) => a - b);
-    // Use 25th percentile as "surface plane" to avoid outlier logo verts
     const wallY = ySamples[Math.floor(ySamples.length * 0.25)];
-
-    // Logo footprint on the front face: centred on X, in upper-Z half
-    // These XZ bounds cover the typical 20×10 mm logo area on the sloped top face.
-    const logoXHalf = bboxSize.x * 0.38; // ±38% of width
+    const logoXHalf = bboxSize.x * 0.38;
     const logoCentreX = bboxCenter.x;
-    const logoZLow = bboxCenter.z + bboxSize.z * 0.15; // lower Z of logo
-    const logoZHigh = bbox.max.z; // up to top of model
-
+    const logoZLow = bboxCenter.z + bboxSize.z * 0.15;
+    const logoZHigh = bbox.max.z;
     let changed = 0;
     for (let i = 0; i < posAttr.count; i++) {
         v.fromBufferAttribute(posAttr, i);
-
-        const inXBand =
-            v.x > logoCentreX - logoXHalf && v.x < logoCentreX + logoXHalf;
-        const inZBand = v.z > logoZLow && v.z < logoZHigh;
-        const protruding = v.y > wallY + 0.05; // only relief verts stick out past wall
-
-        if (inXBand && inZBand && protruding) {
+        if (
+            v.x > logoCentreX - logoXHalf && v.x < logoCentreX + logoXHalf &&
+            v.z > logoZLow && v.z < logoZHigh && v.y > wallY + 0.05
+        ) {
             posAttr.setY(i, wallY);
             changed++;
         }
     }
-
-    if (changed > 0) {
-        posAttr.needsUpdate = true;
-        geometry.computeVertexNormals();
-    }
+    if (changed > 0) { posAttr.needsUpdate = true; geometry.computeVertexNormals(); }
 }
 
-// Custom Extruder Nozzle Component for Slicing Animation
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG → MULTI-COLOUR PATH MESHES
+// Each SVG path becomes its own geometry retaining its original fill colour.
+// All geometries share a common centre derived from the combined bounding box.
+// ─────────────────────────────────────────────────────────────────────────────
+function parseSvgToPaths(
+    svgString: string,
+    scale: number,
+    extrusion: number,
+    fallbackColor: string,
+): SvgPathMesh[] {
+    const loader = new SVGLoader();
+    const svgData = loader.parse(svgString);
+
+    const extrudeSettings: THREE.ExtrudeGeometryOptions = {
+        depth: extrusion,
+        bevelEnabled: true,
+        bevelThickness: 0.3,
+        bevelSize: 0.3,
+        bevelSegments: 3,
+        curveSegments: 20,
+    };
+
+    const rawGeos: THREE.BufferGeometry[] = [];
+    const colors: string[] = [];
+
+    for (const path of svgData.paths) {
+        const shapes = path.toShapes(true);
+        if (!shapes.length) continue;
+        const style: any = path.userData?.style ?? {};
+        let fill: string = style.fill ?? "";
+        if (!fill || fill === "none") fill = fallbackColor;
+        const geo = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
+        geo.rotateX(Math.PI); // SVG Y-axis is inverted relative to Three.js
+        geo.scale(scale, scale, 1);
+        rawGeos.push(geo);
+        colors.push(fill);
+    }
+
+    if (!rawGeos.length) return [];
+
+    // Compute combined bounding box so all paths share the same centre
+    const combined = new THREE.Box3();
+    for (const g of rawGeos) {
+        g.computeBoundingBox();
+        combined.union(g.boundingBox!);
+    }
+    const centre = new THREE.Vector3();
+    combined.getCenter(centre);
+
+    return rawGeos.map((geo, i) => {
+        geo.translate(-centre.x, -centre.y, -centre.z);
+        geo.computeVertexNormals();
+        (geo as any).computeBoundsTree?.();
+        return { geo, color: colors[i] };
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PNG / JPG → SILHOUETTE SHAPE
+// Threshold pixels via canvas, walk column-by-column to build the outline.
+// ─────────────────────────────────────────────────────────────────────────────
+async function imageToSvgPath(
+    dataUrl: string,
+    scale: number,
+    extrusion: number,
+    fallbackColor: string,
+): Promise<SvgPathMesh[]> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const RESOLUTION = 256;
+            const aspect = img.naturalWidth / img.naturalHeight;
+            const cw = RESOLUTION;
+            const ch = Math.round(RESOLUTION / aspect);
+            const canvas = document.createElement("canvas");
+            canvas.width = cw; canvas.height = ch;
+            const ctx = canvas.getContext("2d")!;
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.drawImage(img, 0, 0, cw, ch);
+            const { data } = ctx.getImageData(0, 0, cw, ch);
+
+            const isSolid = (x: number, y: number): boolean => {
+                const idx = (y * cw + x) * 4;
+                const a = data[idx + 3];
+                const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+                return a > 128 && brightness < 200;
+            };
+
+            const norm = (v: number, total: number) => ((v / total) - 0.5) * 50 * scale;
+            const topPts: [number, number][] = [];
+            const botPts: [number, number][] = [];
+
+            for (let x = 0; x < cw; x++) {
+                let top = -1, bot = -1;
+                for (let y = 0; y < ch; y++) {
+                    if (isSolid(x, y)) { if (top === -1) top = y; bot = y; }
+                }
+                if (top !== -1) {
+                    topPts.push([norm(x, cw), -norm(top, ch)]);
+                    botPts.push([norm(x, cw), -norm(bot, ch)]);
+                }
+            }
+
+            if (topPts.length < 4) { resolve([]); return; }
+
+            const shape = new THREE.Shape();
+            shape.moveTo(topPts[0][0], topPts[0][1]);
+            for (const [px, py] of topPts) shape.lineTo(px, py);
+            for (let i = botPts.length - 1; i >= 0; i--) shape.lineTo(botPts[i][0], botPts[i][1]);
+            shape.closePath();
+
+            const geo = new THREE.ExtrudeGeometry([shape], {
+                depth: extrusion,
+                bevelEnabled: true,
+                bevelThickness: 0.3,
+                bevelSize: 0.3,
+                bevelSegments: 3,
+                curveSegments: 16,
+            });
+            geo.center();
+            geo.computeVertexNormals();
+            (geo as any).computeBoundsTree?.();
+            resolve([{ geo, color: fallbackColor }]);
+        };
+        img.onerror = () => resolve([]);
+        img.src = dataUrl;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MX CLICKER HOUSING  ← constructive primitive approach (no CSG)
+//
+// The SVG logo face remains completely untouched (positive Z, clean).
+// The housing is built from box primitives in NEGATIVE Z space — entirely
+// behind the logo's back face.
+//
+// Structure (5 walls + 4 floor tiles):
+//
+//   ┌─────────────────────────┐  ← top wall
+//   │  ┌───────────────────┐  │  ← inner pocket (open top towards logo)
+//   │  │                   │  │
+//   │  │    switch sits    │  │
+//   │  │       here        │  │
+//   │  └──┬──┬──────┬──┬───┘  │  ← floor tiles with cross void
+//   └─────┴──┘      └──┴──────┘  ← bottom wall
+//         ↑
+//     stem cross void (4.40 × 1.30 mm)
+//
+// ─────────────────────────────────────────────────────────────────────────────
+const MxClickerHousing: React.FC<{
+    svgBBox: THREE.Box3;
+    wallThickness: number;
+    clearanceTolerance: number;
+    housingDepth: number;
+    color: string;
+}> = ({ svgBBox, wallThickness, clearanceTolerance, housingDepth, color }) => {
+    // ── Derived dimensions ────────────────────────────────────────────────
+    const innerSize = MX_BODY_SIZE + clearanceTolerance;   // inner pocket (square)
+    const outerW    = innerSize + 2 * wallThickness;
+    const outerH    = innerSize + 2 * wallThickness;
+
+    // Cross void (simplified to square hole = stemHoriz × stemHoriz)
+    const crossW = MX_STEM_HORIZ + clearanceTolerance;     // 4.4 + tol
+    const crossH = MX_STEM_HORIZ + clearanceTolerance;     // use square for clean floor
+
+    // Floor tile strip sizes around the cross void
+    const floorStripW = outerW / 2 - crossW / 2;     // left / right strips
+    const floorStripH = outerH / 2 - crossH / 2;     // top / bottom centre strips
+
+    // ── Group placement ───────────────────────────────────────────────────
+    // Sit the housing open face flush with the SVG back face (svgBBox.min.z)
+    // Group centre is at the midpoint of the wall depth
+    const centre = new THREE.Vector3();
+    svgBBox.getCenter(centre);
+    const groupZ = svgBBox.min.z - housingDepth / 2;
+
+    // Floor Z relative to group centre (just below the wall bottom)
+    const floorLocalZ = -(housingDepth / 2 + FLOOR_THICKNESS / 2);
+
+    // ── Wall positions (local to group) ──────────────────────────────────
+    const lx = -(innerSize / 2 + wallThickness / 2);   // left wall centre X
+    const rx =  (innerSize / 2 + wallThickness / 2);   // right wall centre X
+    const ty =  (innerSize / 2 + wallThickness / 2);   // top wall centre Y
+    const by = -(innerSize / 2 + wallThickness / 2);   // bottom wall centre Y
+
+    const mat = (
+        <meshStandardMaterial
+            color={color}
+            roughness={0.55}
+            metalness={0.05}
+            side={THREE.FrontSide}
+        />
+    );
+
+    const floorMat = (
+        <meshStandardMaterial
+            color={color}
+            roughness={0.6}
+            metalness={0.02}
+        />
+    );
+
+    // ── Small cross indicator ─────────────────────────────────────────────
+    // Renders the cross void shape as a recessed highlight so designers can
+    // visually verify alignment in the 3D preview.
+    const crossIndicatorZ = floorLocalZ + FLOOR_THICKNESS / 2 + 0.05;
+    const crossColor = "#7c3aed"; // purple accent for visibility
+
+    return (
+        <group position={[centre.x, centre.y, groupZ]}>
+
+            {/* ══════════════════════ 4 PERIMETER WALLS ══════════════════ */}
+
+            {/* Left wall */}
+            <mesh castShadow receiveShadow position={[lx, 0, 0]}>
+                <boxGeometry args={[wallThickness, outerH, housingDepth]} />
+                {mat}
+            </mesh>
+
+            {/* Right wall */}
+            <mesh castShadow receiveShadow position={[rx, 0, 0]}>
+                <boxGeometry args={[wallThickness, outerH, housingDepth]} />
+                {mat}
+            </mesh>
+
+            {/* Top wall (inner width only — left/right walls already cover corners) */}
+            <mesh castShadow receiveShadow position={[0, ty, 0]}>
+                <boxGeometry args={[innerSize, wallThickness, housingDepth]} />
+                {mat}
+            </mesh>
+
+            {/* Bottom wall */}
+            <mesh castShadow receiveShadow position={[0, by, 0]}>
+                <boxGeometry args={[innerSize, wallThickness, housingDepth]} />
+                {mat}
+            </mesh>
+
+            {/* ═══════════════════════ FLOOR PLATE ═══════════════════════ */}
+            {/*
+              Built as 4 rectangles arranged around the stem cross void so
+              the floor plate has a clean cross-shaped pass-through for the
+              MX switch stem.  No CSG needed.
+
+              Layout (bird's eye view of floor):
+              ┌────────┬────┬────────┐
+              │ left   │ TL │ right  │  ← top row
+              │ strip  │    │ strip  │
+              ├────────┘    └────────┤
+              │     CROSS VOID      │  ← open (switch stem travel)
+              ├────────┐    ┌────────┤
+              │ left   │ BL │ right  │  ← bottom row
+              │ strip  │    │ strip  │
+              └────────┴────┴────────┘
+            */}
+
+            {/* Left floor strip */}
+            <mesh castShadow receiveShadow
+                position={[-(crossW / 2 + floorStripW / 2), 0, floorLocalZ]}>
+                <boxGeometry args={[floorStripW, outerH, FLOOR_THICKNESS]} />
+                {floorMat}
+            </mesh>
+
+            {/* Right floor strip */}
+            <mesh castShadow receiveShadow
+                position={[+(crossW / 2 + floorStripW / 2), 0, floorLocalZ]}>
+                <boxGeometry args={[floorStripW, outerH, FLOOR_THICKNESS]} />
+                {floorMat}
+            </mesh>
+
+            {/* Top centre floor tile (between cross void top and top wall) */}
+            <mesh castShadow receiveShadow
+                position={[0, +(crossH / 2 + floorStripH / 2), floorLocalZ]}>
+                <boxGeometry args={[crossW, floorStripH, FLOOR_THICKNESS]} />
+                {floorMat}
+            </mesh>
+
+            {/* Bottom centre floor tile */}
+            <mesh castShadow receiveShadow
+                position={[0, -(crossH / 2 + floorStripH / 2), floorLocalZ]}>
+                <boxGeometry args={[crossW, floorStripH, FLOOR_THICKNESS]} />
+                {floorMat}
+            </mesh>
+
+            {/* ════════════════ STEM CROSS INDICATOR ══════════════════════ */}
+            {/*
+              Two overlapping coloured discs in the floor void to show where
+              the 4.40 × 1.30 mm Cherry MX stem cross will be.
+              These are PREVIEW-ONLY and do not affect the exported mesh.
+            */}
+            {/* Horizontal bar */}
+            <mesh position={[0, 0, crossIndicatorZ]}>
+                <boxGeometry args={[MX_STEM_HORIZ + clearanceTolerance, MX_STEM_VERT + clearanceTolerance, 0.1]} />
+                <meshStandardMaterial color={crossColor} emissive={crossColor} emissiveIntensity={0.4} transparent opacity={0.85} />
+            </mesh>
+            {/* Vertical bar */}
+            <mesh position={[0, 0, crossIndicatorZ]}>
+                <boxGeometry args={[MX_STEM_VERT + clearanceTolerance, MX_STEM_HORIZ + clearanceTolerance, 0.1]} />
+                <meshStandardMaterial color={crossColor} emissive={crossColor} emissiveIntensity={0.4} transparent opacity={0.85} />
+            </mesh>
+        </group>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRINT NOZZLE ANIMATION
+// ─────────────────────────────────────────────────────────────────────────────
 const PrintNozzle: React.FC<{
     bounds: THREE.Box3 | null;
     activeLayer: number;
@@ -135,57 +444,35 @@ const PrintNozzle: React.FC<{
     slicerPathProgress: number;
     floorZ: number;
 }> = ({ bounds, activeLayer, totalLayers, slicerPathProgress, floorZ }) => {
-    if (!bounds || activeLayer === undefined || totalLayers === undefined)
-        return null;
-
+    if (!bounds) return null;
     const size = new THREE.Vector3();
     bounds.getSize(size);
     const center = new THREE.Vector3();
     bounds.getCenter(center);
-
-    const layerThickness = size.z / totalLayers;
-    const nozzleZ = floorZ + activeLayer * layerThickness;
-
+    const nozzleZ = floorZ + (activeLayer / totalLayers) * size.z;
     const scanLines = 30;
     const scanIndex = Math.floor(slicerPathProgress * scanLines);
     const scanLineT = (slicerPathProgress * scanLines) % 1;
-
-    let nozzleX = center.x;
-    let nozzleY = center.y;
-
+    let nozzleX = center.x, nozzleY = center.y;
     if (size.x > 0 && size.y > 0) {
         const startX = center.x - size.x / 2;
-        const endX = center.x + size.x / 2;
         const currentX = startX + (scanIndex / scanLines) * size.x;
         const startY = center.y - size.y / 2;
         const endY = center.y + size.y / 2;
-
         nozzleX = currentX;
-        nozzleY =
-            scanIndex % 2 === 0
-                ? startY + scanLineT * (endY - startY)
-                : endY - scanLineT * (endY - startY);
+        nozzleY = scanIndex % 2 === 0
+            ? startY + scanLineT * (endY - startY)
+            : endY - scanLineT * (endY - startY);
     }
-
     return (
         <group position={[nozzleX, nozzleY, nozzleZ]}>
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 8]}>
                 <coneGeometry args={[3, 16, 16]} />
-                <meshStandardMaterial
-                    color="#475569"
-                    roughness={0.5}
-                    metalness={0.8}
-                />
+                <meshStandardMaterial color="#475569" roughness={0.5} metalness={0.8} />
             </mesh>
             <mesh rotation={[Math.PI, 0, 0]} position={[0, 0, 0.5]}>
                 <coneGeometry args={[0.8, 1, 12]} />
-                <meshStandardMaterial
-                    color="#ca8a04"
-                    roughness={0.2}
-                    metalness={0.9}
-                    emissive="#caca24"
-                    emissiveIntensity={0.6}
-                />
+                <meshStandardMaterial color="#ca8a04" roughness={0.2} metalness={0.9} emissive="#caca24" emissiveIntensity={0.6} />
             </mesh>
             <mesh position={[0, 0, 0]}>
                 <sphereGeometry args={[0.4, 8, 8]} />
@@ -196,6 +483,9 @@ const PrintNozzle: React.FC<{
     );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MODEL LOADER
+// ─────────────────────────────────────────────────────────────────────────────
 const ModelLoader: React.FC<{
     state: ClickerState;
     setBaseMeshRef: (mesh: THREE.Mesh | null) => void;
@@ -208,316 +498,256 @@ const ModelLoader: React.FC<{
     setBounds: (bounds: THREE.Box3 | null) => void;
 }> = ({
     state,
-    setBaseMeshRef,
-    setHookMeshRef,
-    setCoverMeshRef,
-    activeLayer,
-    totalLayers,
-    slicerPathProgress,
-    isSlicing,
+    setBaseMeshRef, setHookMeshRef, setCoverMeshRef,
+    activeLayer, totalLayers, slicerPathProgress, isSlicing,
     setBounds,
 }) => {
-    const [baseGeometry, setBaseGeometry] =
-        useState<THREE.BufferGeometry | null>(null);
-    const [connectorGeometry, setConnectorGeometry] =
-        useState<THREE.BufferGeometry | null>(null);
+    const [baseGeometry,   setBaseGeometry]   = useState<THREE.BufferGeometry | null>(null);
+    const [svgPaths,       setSvgPaths]       = useState<SvgPathMesh[]>([]);
+    const [svgCombinedBox, setSvgCombinedBox] = useState<THREE.Box3 | null>(null);
 
     const baseMeshRef = useRef<THREE.Mesh>(null);
     const hookMeshRef = useRef<THREE.Mesh>(null);
+    const ringMeshRef = useRef<THREE.Mesh>(null);
 
-    // 1. Determine active model URL
+    // ── STL model (non-SVG styles) ────────────────────────────────────────
     const modelUrl = useMemo(() => {
-        if (state.style === "custom" && state.customStlUrl) {
-            return state.customStlUrl;
-        }
-        const fileNames = {
-            classic: "/models/obj_1_fidget clicker base.stl",
-            slim: "/models/obj_2_fidget clicker base.stl",
-            elevated: "/models/obj_3_fidget clicker base.stl",
+        if (state.style === "custom" && state.customStlUrl) return state.customStlUrl;
+        const map: Record<string, string> = {
+            classic:   "/models/obj_1_fidget clicker base.stl",
+            slim:      "/models/obj_2_fidget clicker base.stl",
+            elevated:  "/models/obj_3_fidget clicker base.stl",
             ergonomic: "/models/obj_4_fidget clicker base.stl",
-            custom: "/models/obj_3_fidget clicker base.stl",
+            custom:    "/models/obj_3_fidget clicker base.stl",
         };
-        return fileNames[state.style] || fileNames.elevated;
+        return map[state.style] ?? map.elevated;
     }, [state.style, state.customStlUrl]);
 
-    // 2. Load STL base geometry
     useEffect(() => {
-        if (state.style === "svg") return; // SKIP STL LOADER IF SVG
-
-        const loader = new STLLoader();
-        loader.load(
+        if (state.style === "svg") return;
+        new STLLoader().load(
             modelUrl,
             (geometry) => {
                 geometry.computeVertexNormals();
                 geometry.center();
                 if (state.logoRemoved) flattenLogoRegion(geometry);
                 setBaseGeometry(geometry);
+                setSvgPaths([]);
+                setSvgCombinedBox(null);
             },
             undefined,
-            (error) => console.error("Failed to load clicker base STL:", error),
+            (e) => console.error("STL load error:", e),
         );
     }, [modelUrl, state.logoRemoved, state.style]);
 
-    // --- ADDED: SVG TO CLICKER CSG LOGIC ---
+    // ── SVG / Image pipeline ──────────────────────────────────────────────
     useEffect(() => {
-        if (state.style !== "svg" || !state.customSvgString) return;
-
-        try {
-            const loader = new SVGLoader();
-            const svgData = loader.parse(state.customSvgString);
-
-            const shapes: THREE.Shape[] = [];
-            svgData.paths.forEach((path) => {
-                shapes.push(...path.toShapes(true));
-            });
-
-            if (shapes.length === 0) return;
-
-            const thickness = 12.8; // Match standard clicker height
-            const extrudeGeo = new THREE.ExtrudeGeometry(shapes, {
-                depth: thickness,
-                bevelEnabled: true,
-                bevelThickness: 0.5,
-                bevelSize: 0.5,
-                bevelSegments: 3,
-                curveSegments: 16,
-            });
-
-            extrudeGeo.center();
-            const s = state.svgScale || 0.2; // SVGs are usually huge, start scaled down
-            extrudeGeo.scale(s, s, 1); // Only scale X and Y, keep thickness intact
-            // SVGs render Y-down. Rotate by 180 on X to fix upright without breaking winding order
-            extrudeGeo.rotateX(Math.PI);
-            extrudeGeo.computeVertexNormals();
-            extrudeGeo.computeBoundsTree();
-
-            // 1. Convert SVG Base to CSG Brush
-            const baseBrush = new Brush(extrudeGeo);
-            baseBrush.updateMatrixWorld();
-
-            // 2. Create the Mechanical Switch Hole (14.2mm x 14.2mm for 3D print tolerance)
-            const holeGeo = new THREE.BoxGeometry(14.2, 14.2, thickness + 5);
-            holeGeo.computeBoundsTree();
-            const holeBrush = new Brush(holeGeo);
-            holeBrush.updateMatrixWorld();
-
-            // 3. Subtract the Hole from the SVG
-            const evaluator = new Evaluator();
-            const finalBrush = evaluator.evaluate(
-                baseBrush,
-                holeBrush,
-                SUBTRACTION,
-            );
-
-            const finalGeo = finalBrush.geometry.clone();
-            finalGeo.computeVertexNormals();
-
-            setBaseGeometry(finalGeo);
-        } catch (error) {
-            console.error("Failed to parse SVG:", error);
-        }
-    }, [state.style, state.customSvgString, state.svgScale]);
-    // ---------------------------------------
-
-    // 3. Generate Modular Hook Geometry procedurally
-    const hookGeometry = useMemo(() => {
-        if (!state.hookEnabled) return null;
-
-        const w = state.hookWidth;
-        const h = state.hookHeight;
-        const t = state.hookThickness;
-        const r = state.hookHoleRadius;
-
-        let geo: THREE.BufferGeometry;
-
-        if (state.hookStyle === "connector") {
-            return connectorGeometry || new THREE.BoxGeometry(1, 1, 1);
-        } else if (state.hookStyle === "ring") {
-            geo = new THREE.TorusGeometry(w / 2, t / 2, 16, 64);
-        } else if (state.hookStyle === "elevated") {
-            const shape = new THREE.Shape();
-            shape.moveTo(-w / 2, 0);
-            shape.lineTo(w / 2, 0);
-            shape.lineTo(w / 4, h);
-            shape.lineTo(-w / 4, h);
-            shape.lineTo(-w / 2, 0);
-
-            const holePath = new THREE.Path();
-            holePath.absarc(0, h / 2, r, 0, Math.PI * 2, true);
-            shape.holes.push(holePath);
-
-            geo = new THREE.ExtrudeGeometry(shape, {
-                depth: t,
-                bevelEnabled: true,
-                bevelThickness: 0.2,
-                bevelSize: 0.1,
-                bevelSegments: 3,
-                curveSegments: 32,
-            });
-            geo.translate(0, 0, -t / 2);
-            geo.rotateX(Math.PI / 2);
-        } else if (state.hookStyle === "carabiner") {
-            const shape = new THREE.Shape();
-            shape.absarc(-w / 4, 0, h / 2, Math.PI / 2, Math.PI * 1.5);
-            shape.absarc(w / 4, 0, h / 2, Math.PI * 1.5, Math.PI / 2);
-            shape.closePath();
-
-            const holePath = new THREE.Path();
-            holePath.absarc(-w / 4, 0, r, Math.PI / 2, Math.PI * 1.5);
-            holePath.absarc(w / 4, 0, r, Math.PI * 1.5, Math.PI / 2);
-            holePath.closePath();
-            shape.holes.push(holePath);
-
-            geo = new THREE.ExtrudeGeometry(shape, {
-                depth: t,
-                bevelEnabled: false,
-                curveSegments: 32,
-            });
-            geo.translate(0, 0, -t / 2);
-        } else {
-            const shape = new THREE.Shape();
-            shape.moveTo(-w / 2, -h / 2);
-            shape.lineTo(w / 2, -h / 2);
-            shape.lineTo(w / 2, h / 2);
-            shape.lineTo(-w / 2, h / 2);
-            shape.lineTo(-w / 2, -h / 2);
-
-            const holePath = new THREE.Path();
-            holePath.absarc(0, 0, r, 0, Math.PI * 2, true);
-            shape.holes.push(holePath);
-
-            geo = new THREE.ExtrudeGeometry(shape, {
-                depth: t,
-                bevelEnabled: true,
-                bevelThickness: 0.3,
-                bevelSize: 0.2,
-                bevelSegments: 3,
-                curveSegments: 32,
-            });
-            geo.translate(0, 0, -t / 2);
+        if (state.style !== "svg") { setSvgPaths([]); setSvgCombinedBox(null); return; }
+        if (!state.customSvgString && !state.customImageUrl) {
+            setSvgPaths([]); setSvgCombinedBox(null); return;
         }
 
-        return geo;
+        const storePaths = (raw: SvgPathMesh[]) => {
+            if (!raw.length) { setSvgPaths([]); setSvgCombinedBox(null); return; }
+
+            // Compute combined bounding box for housing & ring placement
+            const bbox = new THREE.Box3();
+            for (const { geo } of raw) {
+                geo.computeBoundingBox();
+                bbox.union(geo.boundingBox!);
+            }
+            setSvgCombinedBox(bbox);
+
+            // In clicker mode, SVG paths are NOT modified.
+            // The housing is a separate constructive-geometry group (MxClickerHousing).
+            setSvgPaths(raw);
+        };
+
+        if (state.customSvgString) {
+            try {
+                storePaths(parseSvgToPaths(
+                    state.customSvgString,
+                    state.svgScale,
+                    state.svgExtrusion,
+                    state.baseColor,
+                ));
+            } catch (err) {
+                console.error("SVG parse error:", err);
+                setSvgPaths([]);
+            }
+        } else if (state.customImageUrl) {
+            imageToSvgPath(
+                state.customImageUrl,
+                state.svgScale,
+                state.svgExtrusion,
+                state.baseColor,
+            ).then(storePaths);
+        }
     }, [
-        state.hookEnabled,
-        state.hookStyle,
-        state.hookWidth,
-        state.hookHeight,
-        state.hookThickness,
-        state.hookHoleRadius,
-        connectorGeometry,
+        state.style,
+        state.customSvgString,
+        state.customImageUrl,
+        state.svgScale,
+        state.svgExtrusion,
+        state.baseColor,
+        // svgMode changes do NOT re-parse — the housing is rendered conditionally
     ]);
 
-    // 4. Calculate Hook Placement dynamically on Base Boundaries
+    // ── Keychain ring ─────────────────────────────────────────────────────
+    const keychainRingGeo = useMemo<THREE.BufferGeometry | null>(() => {
+        if (state.style !== "svg" || state.svgMode !== "keychain") return null;
+        return new THREE.TorusGeometry(state.keychainLoopRadius, state.keychainLoopTube, 20, 80);
+    }, [state.style, state.svgMode, state.keychainLoopRadius, state.keychainLoopTube]);
+
+    const keychainRingPos = useMemo<[number, number, number]>(() => {
+        if (!svgCombinedBox || state.svgMode !== "keychain") return [0, 0, 0];
+        const c = new THREE.Vector3();
+        svgCombinedBox.getCenter(c);
+        return [c.x, svgCombinedBox.max.y + state.keychainLoopRadius + state.keychainAttachOffset, c.z];
+    }, [svgCombinedBox, state.svgMode, state.keychainLoopRadius, state.keychainAttachOffset]);
+
+    // ── Modular hook (non-SVG) ────────────────────────────────────────────
+    const hookGeometry = useMemo(() => {
+        if (!state.hookEnabled || state.style === "svg") return null;
+        const w = state.hookWidth, h = state.hookHeight, t = state.hookThickness, r = state.hookHoleRadius;
+        if (state.hookStyle === "ring") return new THREE.TorusGeometry(w / 2, t / 2, 16, 64);
+        if (state.hookStyle === "elevated") {
+            const s = new THREE.Shape();
+            s.moveTo(-w/2, 0); s.lineTo(w/2, 0); s.lineTo(w/4, h); s.lineTo(-w/4, h); s.closePath();
+            const hole = new THREE.Path(); hole.absarc(0, h/2, r, 0, Math.PI * 2, true); s.holes.push(hole);
+            const geo = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.1, bevelSegments: 3, curveSegments: 32 });
+            geo.translate(0, 0, -t / 2); geo.rotateX(Math.PI / 2); return geo;
+        }
+        if (state.hookStyle === "carabiner") {
+            const s = new THREE.Shape();
+            s.absarc(-w/4, 0, h/2, Math.PI/2, Math.PI*1.5);
+            s.absarc(w/4, 0, h/2, Math.PI*1.5, Math.PI/2);
+            s.closePath();
+            const hole = new THREE.Path();
+            hole.absarc(-w/4, 0, r, Math.PI/2, Math.PI*1.5);
+            hole.absarc(w/4, 0, r, Math.PI*1.5, Math.PI/2);
+            hole.closePath();
+            s.holes.push(hole);
+            const geo = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false, curveSegments: 32 });
+            geo.translate(0, 0, -t / 2); return geo;
+        }
+        if (state.hookStyle === "tab") {
+            const s = new THREE.Shape();
+            s.moveTo(-w/2,-h/2); s.lineTo(w/2,-h/2); s.lineTo(w/2,h/2); s.lineTo(-w/2,h/2); s.closePath();
+            const hole = new THREE.Path(); hole.absarc(0, 0, r, 0, Math.PI * 2, true); s.holes.push(hole);
+            const geo = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3, curveSegments: 32 });
+            geo.translate(0, 0, -t / 2); return geo;
+        }
+        return new THREE.BoxGeometry(1, 1, 1); // connector fallback
+    }, [state.hookEnabled, state.style, state.hookStyle, state.hookWidth, state.hookHeight, state.hookThickness, state.hookHoleRadius]);
+
     const hookPlacement = useMemo(() => {
         if (!baseGeometry) return { x: 0, y: 0, z: 0, rotZ: 0 };
-
         baseGeometry.computeBoundingBox();
-        const bbox = baseGeometry.boundingBox || new THREE.Box3();
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
-        const center = new THREE.Vector3();
-        bbox.getCenter(center);
-
-        let hx = center.x + state.hookOffsetX;
-        let hy = center.y + state.hookOffsetY;
-        let hz = center.z + state.hookOffsetZ;
+        const bbox = baseGeometry.boundingBox!;
+        const centre = new THREE.Vector3(); bbox.getCenter(centre);
+        let hx = centre.x + state.hookOffsetX;
+        let hy = centre.y + state.hookOffsetY;
+        let hz = centre.z + state.hookOffsetZ;
         let rotZ = 0;
-
-        if (state.hookPosition === "top") {
-            hy = bbox.max.y + state.hookHeight / 2;
-            rotZ = 0;
-        } else if (state.hookPosition === "bottom") {
-            hy = bbox.min.y - state.hookHeight / 2;
-            rotZ = Math.PI;
-        } else if (state.hookPosition === "left") {
-            hx = bbox.min.x - state.hookWidth / 2;
-            rotZ = Math.PI / 2;
-        } else if (state.hookPosition === "right") {
-            hx = bbox.max.x + state.hookWidth / 2;
-            rotZ = -Math.PI / 2;
-        }
-
+        if (state.hookPosition === "top")    { hy = bbox.max.y + state.hookHeight / 2; rotZ = 0; }
+        if (state.hookPosition === "bottom") { hy = bbox.min.y - state.hookHeight / 2; rotZ = Math.PI; }
+        if (state.hookPosition === "left")   { hx = bbox.min.x - state.hookWidth / 2; rotZ = Math.PI / 2; }
+        if (state.hookPosition === "right")  { hx = bbox.max.x + state.hookWidth / 2; rotZ = -Math.PI / 2; }
         return { x: hx, y: hy, z: hz, rotZ };
-    }, [
-        baseGeometry,
-        state.hookPosition,
-        state.hookWidth,
-        state.hookHeight,
-        state.hookOffsetX,
-        state.hookOffsetY,
-        state.hookOffsetZ,
-    ]);
+    }, [baseGeometry, state.hookPosition, state.hookWidth, state.hookHeight, state.hookOffsetX, state.hookOffsetY, state.hookOffsetZ]);
 
-    // 5. Update parent bounds & refs for exports/slicing
+    // ── Sync refs & bounds ────────────────────────────────────────────────
     useEffect(() => {
-        if (baseMeshRef.current) {
-            setBaseMeshRef(baseMeshRef.current);
-        } else {
-            setBaseMeshRef(null);
-        }
-        if (hookMeshRef.current && state.hookEnabled) {
-            setHookMeshRef(hookMeshRef.current);
-        } else {
-            setHookMeshRef(null);
-        }
-        // No cover mesh — logo is removed directly from geometry
+        setBaseMeshRef(baseMeshRef.current);
+        const hookActive = state.hookEnabled && state.style !== "svg";
+        setHookMeshRef(hookActive ? hookMeshRef.current : null);
         setCoverMeshRef(null);
-
         if (baseMeshRef.current) {
-            const combinedBox = new THREE.Box3().setFromObject(
-                baseMeshRef.current,
-            );
-            if (hookMeshRef.current && state.hookEnabled) {
-                combinedBox.expandByObject(hookMeshRef.current);
-            }
-            setBounds(combinedBox);
+            const box = new THREE.Box3().setFromObject(baseMeshRef.current);
+            if (hookActive && hookMeshRef.current) box.expandByObject(hookMeshRef.current);
+            setBounds(box);
+        } else if (svgCombinedBox) {
+            setBounds(svgCombinedBox.clone());
         }
-    }, [
-        baseGeometry,
-        hookGeometry,
-        hookPlacement,
-        state.hookEnabled,
-        state.logoRemoved,
-        setBaseMeshRef,
-        setHookMeshRef,
-        setCoverMeshRef,
-        setBounds,
-    ]);
+    }, [baseGeometry, svgPaths, svgCombinedBox, hookGeometry, hookPlacement,
+        state.hookEnabled, state.style, state.svgMode,
+        setBaseMeshRef, setHookMeshRef, setCoverMeshRef, setBounds]);
 
-    // 6. Layer Slicing clipping planes
-    const clippingPlanes = useMemo(() => {
-        if (
-            !isSlicing ||
-            activeLayer === undefined ||
-            totalLayers === undefined ||
-            !baseMeshRef.current
-        )
-            return [];
-
-        const bounds = new THREE.Box3().setFromObject(baseMeshRef.current);
-        if (hookMeshRef.current && state.hookEnabled) {
-            bounds.expandByObject(hookMeshRef.current);
-        }
-
-        const size = new THREE.Vector3();
-        bounds.getSize(size);
-
-        const layerThickness = size.z / totalLayers;
-        const sliceZ = bounds.min.z + activeLayer * layerThickness;
+    const clippingPlanes = useMemo<THREE.Plane[]>(() => {
+        if (!isSlicing || activeLayer === undefined || totalLayers === undefined || !baseMeshRef.current) return [];
+        const b = new THREE.Box3().setFromObject(baseMeshRef.current);
+        const size = new THREE.Vector3(); b.getSize(size);
+        const sliceZ = b.min.z + (activeLayer / totalLayers) * size.z;
         return [new THREE.Plane(new THREE.Vector3(0, 0, -1), sliceZ)];
-    }, [isSlicing, activeLayer, totalLayers, state.hookEnabled]);
+    }, [isSlicing, activeLayer, totalLayers]);
 
     return (
         <group>
-            {/* 1. Base Mesh */}
-            {baseGeometry && (
+            {/* ── SVG / Image multi-path meshes (unmodified, colours preserved) */}
+            {state.style === "svg" && svgPaths.map((item, idx) => (
+                <mesh
+                    key={idx}
+                    ref={idx === 0 ? baseMeshRef : undefined}
+                    geometry={item.geo}
+                    name={`svg-path-${idx}`}
+                    castShadow
+                    receiveShadow
+                >
+                    <meshStandardMaterial
+                        color={item.color}
+                        roughness={0.4}
+                        metalness={0.08}
+                        polygonOffset
+                        polygonOffsetFactor={idx + 1}
+                        polygonOffsetUnits={idx + 1}
+                        clippingPlanes={clippingPlanes}
+                        clipShadows
+                    />
+                </mesh>
+            ))}
+
+            {/* ── MX Clicker Housing (constructive primitives, behind SVG) ── */}
+            {state.style === "svg" &&
+                state.svgMode === "clicker" &&
+                svgCombinedBox && (
+                    <MxClickerHousing
+                        svgBBox={svgCombinedBox}
+                        wallThickness={state.clickerWallThickness}
+                        clearanceTolerance={state.clickerTolerance}
+                        housingDepth={state.clickerDepth}
+                        color={state.hookColor}
+                    />
+                )}
+
+            {/* ── Keychain ring ─────────────────────────────────────────── */}
+            {state.style === "svg" &&
+                state.svgMode === "keychain" &&
+                keychainRingGeo && (
+                    <mesh
+                        ref={ringMeshRef}
+                        geometry={keychainRingGeo}
+                        position={keychainRingPos}
+                        name="keychain-ring"
+                        castShadow receiveShadow
+                    >
+                        <meshStandardMaterial
+                            color={state.hookColor}
+                            roughness={0.35}
+                            metalness={0.15}
+                            clippingPlanes={clippingPlanes}
+                            clipShadows
+                        />
+                    </mesh>
+                )}
+
+            {/* ── STL base (non-SVG styles) ─────────────────────────────── */}
+            {state.style !== "svg" && baseGeometry && (
                 <mesh
                     ref={baseMeshRef}
                     geometry={baseGeometry}
                     name="base"
-                    castShadow
-                    receiveShadow
+                    castShadow receiveShadow
                 >
                     <meshStandardMaterial
                         color={state.baseColor}
@@ -529,29 +759,15 @@ const ModelLoader: React.FC<{
                 </mesh>
             )}
 
-            {/* 2. Modular Hook Mesh */}
-            {state.hookEnabled && hookGeometry && (
+            {/* ── Modular hook (non-SVG styles) ─────────────────────────── */}
+            {state.style !== "svg" && state.hookEnabled && hookGeometry && (
                 <mesh
                     ref={hookMeshRef}
                     geometry={hookGeometry}
                     name="hook"
-                    position={[
-                        hookPlacement.x,
-                        hookPlacement.y,
-                        hookPlacement.z,
-                    ]}
+                    position={[hookPlacement.x, hookPlacement.y, hookPlacement.z]}
                     rotation={[0, 0, hookPlacement.rotZ]}
-                    scale={
-                        state.hookStyle === "connector"
-                            ? [
-                                  state.hookWidth / 15,
-                                  state.hookHeight / 18,
-                                  state.hookThickness / 4,
-                              ]
-                            : [1, 1, 1]
-                    }
-                    castShadow
-                    receiveShadow
+                    castShadow receiveShadow
                 >
                     <meshStandardMaterial
                         color={state.hookColor}
@@ -566,14 +782,13 @@ const ModelLoader: React.FC<{
     );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN EXPORTED SCENE
+// ─────────────────────────────────────────────────────────────────────────────
 const SceneClicker: React.FC<SceneProps> = (props) => {
     const { isSlicing, activeLayer, totalLayers, slicerPathProgress } = props;
     const [bounds, setBounds] = useState<THREE.Box3 | null>(null);
-
-    const floorZ = useMemo(() => {
-        if (!bounds) return -10;
-        return bounds.min.z;
-    }, [bounds]);
+    const floorZ = bounds?.min.z ?? -10;
 
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -581,25 +796,18 @@ const SceneClicker: React.FC<SceneProps> = (props) => {
                 shadows
                 camera={{ position: [0, -120, 100], fov: 40 }}
                 gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }}
-                style={{
-                    background:
-                        "radial-gradient(circle at center, #1b2030 0%, #0d0f17 100%)",
-                }}
+                style={{ background: "radial-gradient(circle at center, #1b2030 0%, #0d0f17 100%)" }}
             >
                 <ambientLight intensity={0.5} />
                 <directionalLight
-                    position={[15, -30, 40]}
-                    intensity={1.2}
-                    castShadow
-                    shadow-mapSize={[2048, 2048]}
-                    shadow-bias={-0.0001}
+                    position={[15, -30, 40]} intensity={1.2}
+                    castShadow shadow-mapSize={[2048, 2048]} shadow-bias={-0.0001}
                 />
                 <directionalLight position={[-15, 30, 20]} intensity={0.4} />
                 <pointLight position={[0, 0, 25]} intensity={0.5} />
 
-                <group position={[0, 0, 0]}>
+                <group>
                     <ModelLoader {...props} setBounds={setBounds} />
-
                     {isSlicing &&
                         activeLayer !== undefined &&
                         totalLayers !== undefined &&
@@ -608,7 +816,7 @@ const SceneClicker: React.FC<SceneProps> = (props) => {
                                 bounds={bounds}
                                 activeLayer={activeLayer}
                                 totalLayers={totalLayers}
-                                slicerPathProgress={slicerPathProgress}
+                                slicerPathProgress={slicerPathProgress / 100}
                                 floorZ={floorZ}
                             />
                         )}
@@ -621,18 +829,12 @@ const SceneClicker: React.FC<SceneProps> = (props) => {
                     minDistance={30}
                     maxDistance={250}
                 />
-
                 <Grid
                     position={[0, 0, floorZ - 0.05]}
                     args={[180, 180]}
-                    cellSize={10}
-                    cellThickness={1.0}
-                    cellColor="#1e293b"
-                    sectionSize={50}
-                    sectionThickness={1.5}
-                    sectionColor="#334155"
-                    fadeDistance={180}
-                    infiniteGrid
+                    cellSize={10} cellThickness={1.0} cellColor="#1e293b"
+                    sectionSize={50} sectionThickness={1.5} sectionColor="#334155"
+                    fadeDistance={180} infiniteGrid
                 />
                 <Environment preset="city" />
             </Canvas>

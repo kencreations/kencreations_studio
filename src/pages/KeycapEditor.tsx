@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, Camera, Lock, Download } from "lucide-react";
+import { ChevronLeft, Camera, Lock, Download, Upload, Search, Smile } from "lucide-react";
 import * as THREE from "three";
 import SceneKeycap, {
     FONT_OPTIONS,
@@ -10,7 +10,9 @@ import SceneKeycap, {
 } from "../components/SceneKeycap";
 import type { KeycapState } from "../components/SceneKeycap";
 import type { SceneInnerHandle } from "../components/SceneKeycap";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
+import JSZip from "jszip";
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 const DEFAULT_STATE: KeycapState = {
@@ -38,17 +40,143 @@ function downloadBinary(data: ArrayBuffer | string, filename: string) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ── Main editor ───────────────────────────────────────────────────────────────
+// ── 3MF geometry extractor ───────────────────────────────────────────────────
+async function load3mfGeometry(file: File): Promise<THREE.BufferGeometry> {
+    const zip = await JSZip.loadAsync(file);
+    // Find the first .model file inside the 3MF zip
+    const modelEntry = Object.values(zip.files).find(
+        (f) => f.name.endsWith(".model") && !f.dir
+    );
+    if (!modelEntry) throw new Error("No .model file found inside 3MF archive.");
+    const xmlText = await modelEntry.async("text");
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, "application/xml");
+
+    const vertices: number[] = [];
+    const indices: number[] = [];
+
+    doc.querySelectorAll("mesh").forEach((meshEl) => {
+        const baseIdx = vertices.length / 3;
+        meshEl.querySelectorAll("vertex").forEach((v) => {
+            vertices.push(
+                parseFloat(v.getAttribute("x") ?? "0"),
+                parseFloat(v.getAttribute("y") ?? "0"),
+                parseFloat(v.getAttribute("z") ?? "0")
+            );
+        });
+        meshEl.querySelectorAll("triangle").forEach((t) => {
+            indices.push(
+                baseIdx + parseInt(t.getAttribute("v1") ?? "0", 10),
+                baseIdx + parseInt(t.getAttribute("v2") ?? "0", 10),
+                baseIdx + parseInt(t.getAttribute("v3") ?? "0", 10)
+            );
+        });
+    });
+
+    if (vertices.length === 0) throw new Error("No vertex data found in 3MF model.");
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(vertices), 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+}
+
+// ── Main editor ────────────────────────────────────────────────────────────
 const KeycapEditor: React.FC = () => {
     const [state, setState]     = useState<KeycapState>(DEFAULT_STATE);
     const [capBB,  setCapBB]    = useState<THREE.Box3 | null>(null);
     const [exporting, setExporting] = useState(false);
+    const [customGeo, setCustomGeo] = useState<THREE.BufferGeometry | null>(null);
+    const [customFileName, setCustomFileName] = useState<string | null>(null);
+    const [loadingTemplate, setLoadingTemplate] = useState(false);
+    const [templateError, setTemplateError] = useState<string | null>(null);
     const sceneRef = useRef<SceneInnerHandle>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // ── Icon picker state ──────────────────────────────────────────────────
+    const [iconPickerOpen, setIconPickerOpen]   = useState(false);
+    const [iconQuery,      setIconQuery]         = useState("");
+    const [iconResults,    setIconResults]       = useState<string[]>([]);
+    const [iconLoading,    setIconLoading]       = useState(false);
+    const iconDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const set = <K extends keyof KeycapState>(key: K, value: KeycapState[K]) =>
         setState(prev => ({ ...prev, [key]: value }));
 
     const handleCapBB = useCallback((bb: THREE.Box3 | null) => setCapBB(bb), []);
+
+    // ── File upload handler (STL or 3MF) ───────────────────────────────────
+    const handleTemplateUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setTemplateError(null);
+        setLoadingTemplate(true);
+        try {
+            const ext = file.name.split(".").pop()?.toLowerCase();
+            let geo: THREE.BufferGeometry;
+            if (ext === "stl") {
+                const buf = await file.arrayBuffer();
+                geo = new STLLoader().parse(buf);
+            } else if (ext === "3mf") {
+                geo = await load3mfGeometry(file);
+            } else {
+                throw new Error("Unsupported file type. Please upload an STL or 3MF file.");
+            }
+            setCustomGeo(geo);
+            setCustomFileName(file.name);
+        } catch (err: any) {
+            setTemplateError(err?.message ?? "Failed to load file.");
+        } finally {
+            setLoadingTemplate(false);
+            // Reset input so the same file can be re-uploaded
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    }, []);
+
+    const clearTemplate = useCallback(() => {
+        setCustomGeo(null);
+        setCustomFileName(null);
+        setTemplateError(null);
+    }, []);
+
+    // ── Icon search via Iconify API ───────────────────────────────────────
+    const handleIconSearch = useCallback((q: string) => {
+        setIconQuery(q);
+        if (iconDebounce.current) clearTimeout(iconDebounce.current);
+        if (!q.trim()) { setIconResults([]); return; }
+        iconDebounce.current = setTimeout(async () => {
+            setIconLoading(true);
+            try {
+                const res = await fetch(
+                    `https://api.iconify.design/search?query=${encodeURIComponent(q)}&limit=30`
+                );
+                const json = await res.json();
+                setIconResults(json.icons ?? []);
+            } catch {
+                setIconResults([]);
+            } finally {
+                setIconLoading(false);
+            }
+        }, 350);
+    }, []);
+
+    /** Append an icon token to the current legends string. */
+    const insertIcon = useCallback((iconId: string) => {
+        const token = `[${iconId}]`;
+        set("legends", state.legends + (state.legends.endsWith(" ") || state.legends === "" ? "" : " ") + token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [state.legends]);
+
+    // Preset icon categories for the picker
+    const ICON_PRESETS: { label: string; icons: string[] }[] = [
+        { label: "Arrows",  icons: ["mdi:arrow-up","mdi:arrow-down","mdi:arrow-left","mdi:arrow-right","mdi:arrow-u-left-top","mdi:arrow-expand-all"] },
+        { label: "Symbols", icons: ["mdi:heart","mdi:star","mdi:check-bold","mdi:close","mdi:infinity","mdi:lightning-bolt"] },
+        { label: "UI",      icons: ["mdi:home","mdi:magnify","mdi:bell","mdi:cog","mdi:menu","mdi:account"] },
+        { label: "Media",   icons: ["mdi:play","mdi:pause","mdi:stop","mdi:skip-next","mdi:volume-high","mdi:music-note"] },
+        { label: "Gaming",  icons: ["mdi:gamepad-variant","mdi:sword","mdi:shield","mdi:skull","mdi:trophy","mdi:ghost"] },
+    ];
+    const [presetTab, setPresetTab] = useState("Arrows");
 
     const letters = lettersFromLegends(state.legends);
     const bounds  = computeSetBounds(letters.length, capBB);
@@ -220,17 +348,175 @@ const KeycapEditor: React.FC = () => {
 
                     <hr style={{ border: "none", borderTop: "1px solid #f0f0f0", margin: 0 }} />
 
-                    {/* Keycap base */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                        <span style={{ fontSize: "0.82rem", color: "#374151", fontWeight: 600 }}>Keycap base (STL)</span>
-                        <div style={{
-                            border: "1px solid #d1d5db", borderRadius: "8px",
-                            padding: "9px 12px", background: "#fafafa",
-                            fontSize: "0.82rem", color: "#6b7280",
-                        }}>
-                            Choose File  No file chosen
-                        </div>
-                        <span style={{ fontSize: "0.7rem", color: "#6b7280" }}>keycap.stl</span>
+                    {/* ── Icon Library ─────────────────────────────────────────── */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <button
+                            id="icon-picker-toggle"
+                            onClick={() => setIconPickerOpen(v => !v)}
+                            style={{
+                                display: "flex", alignItems: "center", gap: "8px",
+                                background: "none", border: "none", cursor: "pointer",
+                                padding: 0, fontFamily: "inherit", width: "100%",
+                            }}
+                        >
+                            <Smile size={15} color="#6b7280" />
+                            <span style={{ fontSize: "0.82rem", color: "#374151", fontWeight: 600 }}>
+                                Icon Library
+                            </span>
+                            <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#9ca3af" }}>
+                                {iconPickerOpen ? "▲" : "▼"}
+                            </span>
+                        </button>
+
+                        {iconPickerOpen && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <div style={{ position: "relative" }}>
+                                    <Search size={13} color="#9ca3af"
+                                        style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                                    <input
+                                        id="icon-search-input"
+                                        type="text"
+                                        placeholder="Search 200k+ icons…"
+                                        value={iconQuery}
+                                        onChange={e => handleIconSearch(e.target.value)}
+                                        style={{
+                                            width: "100%", boxSizing: "border-box",
+                                            padding: "8px 10px 8px 30px",
+                                            border: "1px solid #d1d5db", borderRadius: "8px",
+                                            fontSize: "0.78rem", outline: "none",
+                                            background: "#fafafa", fontFamily: "inherit",
+                                        }}
+                                    />
+                                </div>
+
+                                {iconQuery.trim() ? (
+                                    <div>
+                                        {iconLoading ? (
+                                            <p style={{ fontSize: "0.72rem", color: "#9ca3af", margin: 0 }}>Searching…</p>
+                                        ) : iconResults.length === 0 ? (
+                                            <p style={{ fontSize: "0.72rem", color: "#9ca3af", margin: 0 }}>No results.</p>
+                                        ) : (
+                                            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "4px" }}>
+                                                {iconResults.map(id => (
+                                                    <button key={id} title={id} onClick={() => insertIcon(id)}
+                                                        style={{
+                                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                                            width: "100%", aspectRatio: "1",
+                                                            border: "1px solid #e5e7eb", borderRadius: "6px",
+                                                            background: "#fafafa", cursor: "pointer", padding: "4px",
+                                                        }}>
+                                                        <img src={`https://api.iconify.design/${id.replace(":", "/")}.svg`}
+                                                            alt={id} style={{ width: "22px", height: "22px" }} />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                                            {ICON_PRESETS.map(cat => (
+                                                <button key={cat.label} onClick={() => setPresetTab(cat.label)}
+                                                    style={{
+                                                        padding: "3px 8px", fontSize: "0.7rem", borderRadius: "5px", border: "1px solid",
+                                                        borderColor: presetTab === cat.label ? "#2563eb" : "#d1d5db",
+                                                        background: presetTab === cat.label ? "#eff6ff" : "#f9fafb",
+                                                        color: presetTab === cat.label ? "#1d4ed8" : "#374151",
+                                                        cursor: "pointer", fontWeight: 500, fontFamily: "inherit",
+                                                    }}
+                                                >{cat.label}</button>
+                                            ))}
+                                        </div>
+                                        {ICON_PRESETS.filter(c => c.label === presetTab).map(cat => (
+                                            <div key={cat.label} style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "4px" }}>
+                                                {cat.icons.map(id => (
+                                                    <button key={id} title={id} onClick={() => insertIcon(id)}
+                                                        style={{
+                                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                                            width: "100%", aspectRatio: "1",
+                                                            border: "1px solid #e5e7eb", borderRadius: "6px",
+                                                            background: "#fafafa", cursor: "pointer", padding: "4px",
+                                                        }}>
+                                                        <img src={`https://api.iconify.design/${id.replace(":", "/")}.svg`}
+                                                            alt={id} style={{ width: "22px", height: "22px" }} />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <p style={{ fontSize: "0.68rem", color: "#9ca3af", margin: 0, lineHeight: 1.4 }}>
+                                    Icons render as 3D raised shapes. Added as{" "}
+                                    <code style={{ background: "#f3f4f6", padding: "0 3px", borderRadius: 3 }}>[set:name]</code>{" "}
+                                    tokens. Powered by <strong>Iconify</strong> (200k+ icons).
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <hr style={{ border: "none", borderTop: "1px solid #f0f0f0", margin: 0 }} />
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <span style={{ fontSize: "0.82rem", color: "#374151", fontWeight: 600 }}>Keycap template (STL / 3MF)</span>
+
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            id="keycap-template-input"
+                            type="file"
+                            accept=".stl,.3mf"
+                            style={{ display: "none" }}
+                            onChange={handleTemplateUpload}
+                        />
+
+                        {customFileName ? (
+                            /* Loaded state */
+                            <div style={{
+                                display: "flex", alignItems: "center", gap: "8px",
+                                border: "1.5px solid #2563eb", borderRadius: "8px",
+                                padding: "9px 12px", background: "#eff6ff",
+                            }}>
+                                <Upload size={14} color="#2563eb" />
+                                <span style={{ flex: 1, fontSize: "0.78rem", color: "#1d4ed8", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {customFileName}
+                                </span>
+                                <button
+                                    onClick={clearTemplate}
+                                    title="Remove custom template"
+                                    style={{
+                                        background: "none", border: "none", cursor: "pointer",
+                                        color: "#6b7280", fontSize: "1rem", lineHeight: 1, padding: "0 2px",
+                                    }}
+                                >×</button>
+                            </div>
+                        ) : (
+                            /* Upload button */
+                            <button
+                                id="upload-template-btn"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={loadingTemplate}
+                                style={{
+                                    display: "flex", alignItems: "center", gap: "8px",
+                                    border: "1.5px dashed #d1d5db", borderRadius: "8px",
+                                    padding: "10px 14px", background: "#fafafa",
+                                    cursor: loadingTemplate ? "wait" : "pointer",
+                                    fontSize: "0.82rem", color: "#6b7280",
+                                    fontFamily: "inherit", width: "100%", textAlign: "left",
+                                }}
+                            >
+                                <Upload size={14} />
+                                {loadingTemplate ? "Loading…" : "Upload your 3MF or STL"}
+                            </button>
+                        )}
+
+                        {templateError && (
+                            <p style={{ fontSize: "0.72rem", color: "#dc2626", margin: 0 }}>{templateError}</p>
+                        )}
+
+                        <p style={{ fontSize: "0.7rem", color: "#9ca3af", margin: 0, lineHeight: 1.4 }}>
+                            Upload your own keycap shell to use as the base. Leave empty to use the built-in template.
+                        </p>
                     </div>
 
                     <hr style={{ border: "none", borderTop: "1px solid #f0f0f0", margin: 0 }} />
@@ -304,7 +590,7 @@ const KeycapEditor: React.FC = () => {
 
             {/* ── RIGHT: 3D VIEWPORT ───────────────────────────────────────── */}
             <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-                <SceneKeycap ref={sceneRef} state={state} onCapBB={handleCapBB} />
+                <SceneKeycap ref={sceneRef} state={state} onCapBB={handleCapBB} customGeo={customGeo} />
 
                 {/* Size HUD */}
                 {capBB && (

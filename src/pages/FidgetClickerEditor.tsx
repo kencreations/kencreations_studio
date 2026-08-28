@@ -50,9 +50,23 @@ const FidgetClickerEditor: React.FC = () => {
         style: "elevated",
         customStlUrl: null,
         customStlName: null,
-        customSvgString: null, // NEW
-        customSvgName: null,   // NEW
-        svgScale: 0.2,         // NEW
+        customSvgString: null,
+        customSvgName: null,
+        customImageUrl: null,
+        customImageName: null,
+        svgScale: 0.2,
+        // ── SVG Mechanical Mode ───────────────────────────────────────────
+        svgMode: "none",
+        svgExtrusion: 5,
+        // Keychain Mode
+        keychainLoopRadius: 5,
+        keychainLoopTube: 1.5,
+        keychainAttachOffset: 0,
+        // Clicker Mode (Cherry MX)
+        clickerWallThickness: 2.0,
+        clickerTolerance: 0.15,
+        clickerDepth: 12.8,
+        // ─────────────────────────────────────────────────────────────────
         baseColor: "#06b6d4",
         hookColor: "#10b981",
         hookEnabled: true,
@@ -206,7 +220,7 @@ const FidgetClickerEditor: React.FC = () => {
         }, 100);
     };
 
-   const svgFileInputRef = useRef<HTMLInputElement>(null);
+    const svgFileInputRef = useRef<HTMLInputElement>(null);
 
     const handleSvgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -220,9 +234,18 @@ const FidgetClickerEditor: React.FC = () => {
                     customSvgName: file.name,
                 }));
             };
-            reader.readAsText(file); // SVGs must be read as raw text XML
+            reader.readAsText(file);
         }
+        // Reset input so same file can be re-selected
+        e.target.value = "";
     };
+
+    /** Helper: validate clicker depth vs extrusion */
+    const clickerDepthWarning =
+        state.svgMode === "clicker" &&
+        state.clickerDepth > state.svgExtrusion
+            ? `Depth (${state.clickerDepth}mm) exceeds extrusion (${state.svgExtrusion}mm) — will be clamped.`
+            : null;
 
     const handleCustomStlUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -598,6 +621,485 @@ const FidgetClickerEditor: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
+
+                                {/* ══ SVG MECHANICAL MODE PANEL ══════════════════════════════ */}
+                                {state.style === "svg" && (
+                                    <div
+                                        style={{
+                                            marginTop: "4px",
+                                            borderTop: "1px solid rgba(255,255,255,0.08)",
+                                            paddingTop: "16px",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: "14px",
+                                        }}
+                                    >
+                                        {/* Section label */}
+                                        <span
+                                            style={{
+                                                fontSize: "0.8rem",
+                                                color: "#9ca3af",
+                                                fontWeight: 500,
+                                                letterSpacing: "0.05em",
+                                            }}
+                                        >
+                                            SVG EXTRUSION DEPTH
+                                        </span>
+
+                                        {/* Extrusion depth slider */}
+                                        <div>
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    fontSize: "0.8rem",
+                                                    marginBottom: "4px",
+                                                }}
+                                            >
+                                                <span>Depth</span>
+                                                <span>{state.svgExtrusion} mm</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min={1}
+                                                max={25}
+                                                step={0.5}
+                                                value={state.svgExtrusion}
+                                                onChange={(e) =>
+                                                    handleStateChange(
+                                                        "svgExtrusion",
+                                                        Number(e.target.value),
+                                                    )
+                                                }
+                                                style={{ width: "100%", accentColor: "#06b6d4" }}
+                                            />
+                                        </div>
+
+                                        {/* SVG Scale slider */}
+                                        <div>
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    fontSize: "0.8rem",
+                                                    marginBottom: "4px",
+                                                }}
+                                            >
+                                                <span>SVG Scale</span>
+                                                <span>{state.svgScale.toFixed(2)}×</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min={0.05}
+                                                max={1.0}
+                                                step={0.01}
+                                                value={state.svgScale}
+                                                onChange={(e) =>
+                                                    handleStateChange(
+                                                        "svgScale",
+                                                        Number(e.target.value),
+                                                    )
+                                                }
+                                                style={{ width: "100%", accentColor: "#06b6d4" }}
+                                            />
+                                        </div>
+
+                                        {/* ── Mode Selector ─────────────────────────────────── */}
+                                        <div>
+                                            <span
+                                                style={{
+                                                    fontSize: "0.8rem",
+                                                    color: "#9ca3af",
+                                                    fontWeight: 500,
+                                                    letterSpacing: "0.05em",
+                                                    display: "block",
+                                                    marginBottom: "8px",
+                                                }}
+                                            >
+                                                MECHANICAL MODE
+                                            </span>
+                                            <div
+                                                style={{
+                                                    display: "grid",
+                                                    gridTemplateColumns: "1fr 1fr 1fr",
+                                                    gap: "6px",
+                                                }}
+                                            >
+                                                {([
+                                                    { id: "none",     label: "None",     icon: "○" },
+                                                    { id: "keychain", label: "Keychain", icon: "⛓" },
+                                                    { id: "clicker",  label: "MX Clicker", icon: "⌨" },
+                                                ] as { id: "none" | "keychain" | "clicker"; label: string; icon: string }[]).map(
+                                                    (m) => (
+                                                        <button
+                                                            key={m.id}
+                                                            id={`svg-mode-${m.id}`}
+                                                            onClick={() =>
+                                                                handleStateChange("svgMode", m.id)
+                                                            }
+                                                            style={{
+                                                                padding: "10px 6px",
+                                                                borderRadius: "10px",
+                                                                border: "1px solid",
+                                                                borderColor:
+                                                                    state.svgMode === m.id
+                                                                        ? "#06b6d4"
+                                                                        : "rgba(255,255,255,0.08)",
+                                                                background:
+                                                                    state.svgMode === m.id
+                                                                        ? "rgba(6,182,212,0.12)"
+                                                                        : "rgba(255,255,255,0.02)",
+                                                                color:
+                                                                    state.svgMode === m.id
+                                                                        ? "#22d3ee"
+                                                                        : "#9ca3af",
+                                                                fontSize: "0.75rem",
+                                                                fontWeight: state.svgMode === m.id ? 700 : 500,
+                                                                cursor: "pointer",
+                                                                display: "flex",
+                                                                flexDirection: "column",
+                                                                alignItems: "center",
+                                                                gap: "4px",
+                                                                transition: "all 0.15s ease",
+                                                            }}
+                                                        >
+                                                            <span style={{ fontSize: "1.1rem" }}>{m.icon}</span>
+                                                            {m.label}
+                                                        </button>
+                                                    ),
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* ── KEYCHAIN MODE PANEL ───────────────────────────── */}
+                                        {state.svgMode === "keychain" && (
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: "12px",
+                                                    background: "rgba(16,185,129,0.06)",
+                                                    border: "1px solid rgba(16,185,129,0.2)",
+                                                    borderRadius: "12px",
+                                                    padding: "14px",
+                                                }}
+                                            >
+                                                {/* Header */}
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "8px",
+                                                        marginBottom: "2px",
+                                                    }}
+                                                >
+                                                    <span style={{ fontSize: "1rem" }}>⛓</span>
+                                                    <span
+                                                        style={{
+                                                            fontWeight: 700,
+                                                            fontSize: "0.85rem",
+                                                            color: "#10b981",
+                                                        }}
+                                                    >
+                                                        Keychain Loop Settings
+                                                    </span>
+                                                </div>
+
+                                                {/* Loop Radius */}
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "4px",
+                                                            color: "#d1fae5",
+                                                        }}
+                                                    >
+                                                        <span>Loop Radius</span>
+                                                        <span>{state.keychainLoopRadius} mm</span>
+                                                    </div>
+                                                    <input
+                                                        id="keychain-loop-radius"
+                                                        type="range"
+                                                        min={2}
+                                                        max={15}
+                                                        step={0.5}
+                                                        value={state.keychainLoopRadius}
+                                                        onChange={(e) =>
+                                                            handleStateChange(
+                                                                "keychainLoopRadius",
+                                                                Number(e.target.value),
+                                                            )
+                                                        }
+                                                        style={{ width: "100%", accentColor: "#10b981" }}
+                                                    />
+                                                </div>
+
+                                                {/* Loop Tube Thickness */}
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "4px",
+                                                            color: "#d1fae5",
+                                                        }}
+                                                    >
+                                                        <span>Ring Thickness</span>
+                                                        <span>{state.keychainLoopTube} mm</span>
+                                                    </div>
+                                                    <input
+                                                        id="keychain-loop-tube"
+                                                        type="range"
+                                                        min={0.5}
+                                                        max={5}
+                                                        step={0.1}
+                                                        value={state.keychainLoopTube}
+                                                        onChange={(e) =>
+                                                            handleStateChange(
+                                                                "keychainLoopTube",
+                                                                Number(e.target.value),
+                                                            )
+                                                        }
+                                                        style={{ width: "100%", accentColor: "#10b981" }}
+                                                    />
+                                                </div>
+
+                                                {/* Attachment Offset */}
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "4px",
+                                                            color: "#d1fae5",
+                                                        }}
+                                                    >
+                                                        <span>Attach Offset</span>
+                                                        <span>
+                                                            {state.keychainAttachOffset > 0 ? "+" : ""}
+                                                            {state.keychainAttachOffset} mm
+                                                        </span>
+                                                    </div>
+                                                    <input
+                                                        id="keychain-attach-offset"
+                                                        type="range"
+                                                        min={-20}
+                                                        max={20}
+                                                        step={0.5}
+                                                        value={state.keychainAttachOffset}
+                                                        onChange={(e) =>
+                                                            handleStateChange(
+                                                                "keychainAttachOffset",
+                                                                Number(e.target.value),
+                                                            )
+                                                        }
+                                                        style={{ width: "100%", accentColor: "#10b981" }}
+                                                    />
+                                                </div>
+
+                                                {/* Info: ring color inherits hookColor from Color tab */}
+                                                <div
+                                                    style={{
+                                                        fontSize: "0.72rem",
+                                                        color: "#6ee7b7",
+                                                        background: "rgba(16,185,129,0.08)",
+                                                        borderRadius: "8px",
+                                                        padding: "8px 10px",
+                                                    }}
+                                                >
+                                                    💡 Ring color is set in the <strong>Color</strong> tab → Hook Color.
+                                                    Exported as a separate mesh for two-color printing.
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* ── CLICKER MODE PANEL ────────────────────────────── */}
+                                        {state.svgMode === "clicker" && (
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: "12px",
+                                                    background: "rgba(139,92,246,0.07)",
+                                                    border: "1px solid rgba(139,92,246,0.25)",
+                                                    borderRadius: "12px",
+                                                    padding: "14px",
+                                                }}
+                                            >
+                                                {/* Header */}
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "8px",
+                                                        marginBottom: "2px",
+                                                    }}
+                                                >
+                                                    <span style={{ fontSize: "1rem" }}>⌨</span>
+                                                    <span
+                                                        style={{
+                                                            fontWeight: 700,
+                                                            fontSize: "0.85rem",
+                                                            color: "#a78bfa",
+                                                        }}
+                                                    >
+                                                        MX Clicker Housing
+                                                    </span>
+                                                </div>
+
+                                                {/* Locked spec chip */}
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        flexDirection: "column",
+                                                        gap: "4px",
+                                                        background: "rgba(139,92,246,0.12)",
+                                                        border: "1px solid rgba(139,92,246,0.3)",
+                                                        borderRadius: "10px",
+                                                        padding: "10px 12px",
+                                                        fontSize: "0.75rem",
+                                                        color: "#c4b5fd",
+                                                    }}
+                                                >
+                                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                        <span>🔒 Switch body cavity</span>
+                                                        <span style={{ fontWeight: 700, color: "#ede9fe" }}>13.8 × 13.8 mm</span>
+                                                    </div>
+                                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                        <span>🔒 Stem cross (H × V)</span>
+                                                        <span style={{ fontWeight: 700, color: "#ede9fe" }}>4.40 × 1.30 mm</span>
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            marginTop: "4px",
+                                                            fontSize: "0.68rem",
+                                                            color: "#a78bfa",
+                                                        }}
+                                                    >
+                                                        Tolerance is added symmetrically to both specs
+                                                    </div>
+                                                </div>
+
+                                                {/* Wall Thickness */}
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "4px",
+                                                            color: "#e9d5ff",
+                                                        }}
+                                                    >
+                                                        <span>Wall Thickness</span>
+                                                        <span>{state.clickerWallThickness.toFixed(1)} mm</span>
+                                                    </div>
+                                                    <input
+                                                        id="clicker-wall-thickness"
+                                                        type="range"
+                                                        min={1.0}
+                                                        max={5.0}
+                                                        step={0.1}
+                                                        value={state.clickerWallThickness}
+                                                        onChange={(e) =>
+                                                            handleStateChange(
+                                                                "clickerWallThickness",
+                                                                Number(e.target.value),
+                                                            )
+                                                        }
+                                                        style={{ width: "100%", accentColor: "#8b5cf6" }}
+                                                    />
+                                                </div>
+
+                                                {/* Clearance Tolerance */}
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "4px",
+                                                            color: "#e9d5ff",
+                                                        }}
+                                                    >
+                                                        <span>Clearance Tolerance</span>
+                                                        <span>±{state.clickerTolerance.toFixed(2)} mm</span>
+                                                    </div>
+                                                    <input
+                                                        id="clicker-tolerance"
+                                                        type="range"
+                                                        min={0.0}
+                                                        max={0.5}
+                                                        step={0.01}
+                                                        value={state.clickerTolerance}
+                                                        onChange={(e) =>
+                                                            handleStateChange(
+                                                                "clickerTolerance",
+                                                                Number(e.target.value),
+                                                            )
+                                                        }
+                                                        style={{ width: "100%", accentColor: "#8b5cf6" }}
+                                                    />
+                                                </div>
+
+                                                {/* Custom Housing Depth */}
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "4px",
+                                                            color: "#e9d5ff",
+                                                        }}
+                                                    >
+                                                        <span>Housing Depth</span>
+                                                        <span>{state.clickerDepth.toFixed(1)} mm</span>
+                                                    </div>
+                                                    <input
+                                                        id="clicker-depth"
+                                                        type="range"
+                                                        min={3.0}
+                                                        max={20.0}
+                                                        step={0.1}
+                                                        value={state.clickerDepth}
+                                                        onChange={(e) =>
+                                                            handleStateChange(
+                                                                "clickerDepth",
+                                                                Number(e.target.value),
+                                                            )
+                                                        }
+                                                        style={{ width: "100%", accentColor: "#8b5cf6" }}
+                                                    />
+                                                </div>
+
+                                                {/* Depth vs extrusion warning */}
+                                                {clickerDepthWarning && (
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "flex-start",
+                                                            gap: "8px",
+                                                            background: "rgba(234,179,8,0.1)",
+                                                            border: "1px solid rgba(234,179,8,0.3)",
+                                                            borderRadius: "8px",
+                                                            padding: "8px 10px",
+                                                            fontSize: "0.72rem",
+                                                            color: "#fde047",
+                                                        }}
+                                                    >
+                                                        <span style={{ flexShrink: 0 }}>⚠️</span>
+                                                        <span>{clickerDepthWarning}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div
                                     style={{

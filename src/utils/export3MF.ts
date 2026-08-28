@@ -63,16 +63,17 @@ export async function export3MF(
     let buildXml = `  <build>\n`;
 
     unitEntries.forEach(({ meshes, transform, inverseRootMatrix }) => {
-        const unitObjectId = nextObjectId++;
-        
-        let objectXml = `    <object id="${unitObjectId}" type="model">\n      <mesh>\n        <vertices>\n`;
-        let trianglesXml = `        <triangles>\n`;
-        
-        let vertexOffset = 0;
+        const componentIds: number[] = [];
 
         meshes.forEach((mesh) => {
             const geometry = mesh.geometry;
             if (!geometry || !geometry.attributes.position) return;
+
+            const meshObjectId = nextObjectId++;
+            componentIds.push(meshObjectId);
+
+            let objectXml = `    <object id="${meshObjectId}" type="model">\n      <mesh>\n        <vertices>\n`;
+            let trianglesXml = `        <triangles>\n`;
 
             const positionAttr = geometry.attributes.position;
             const indexAttr = geometry.index;
@@ -92,20 +93,29 @@ export async function export3MF(
             if (indexAttr) {
                 const indices = indexAttr.array;
                 for (let i = 0; i < indices.length; i += 3) {
-                    trianglesXml += `          <triangle v1="${indices[i] + vertexOffset}" v2="${indices[i + 1] + vertexOffset}" v3="${indices[i + 2] + vertexOffset}" pid="1" p1="${colorIndex}"/>\n`;
+                    trianglesXml += `          <triangle v1="${indices[i]}" v2="${indices[i + 1]}" v3="${indices[i + 2]}" pid="1" p1="${colorIndex}"/>\n`;
                 }
             } else {
                 for (let i = 0; i < positionAttr.count; i += 3) {
-                    trianglesXml += `          <triangle v1="${i + vertexOffset}" v2="${i + 1 + vertexOffset}" v3="${i + 2 + vertexOffset}" pid="1" p1="${colorIndex}"/>\n`;
+                    trianglesXml += `          <triangle v1="${i}" v2="${i + 1}" v3="${i + 2}" pid="1" p1="${colorIndex}"/>\n`;
                 }
             }
 
-            vertexOffset += positionAttr.count;
+            objectXml += `        </vertices>\n${trianglesXml}        </triangles>\n      </mesh>\n    </object>\n`;
+            resourcesXml += objectXml;
         });
 
-        objectXml += `        </vertices>\n${trianglesXml}        </triangles>\n      </mesh>\n    </object>\n`;
-        resourcesXml += objectXml;
-        buildXml += `    <item objectid="${unitObjectId}" transform="${transform}" />\n`;
+        if (componentIds.length > 0) {
+            const assemblyId = nextObjectId++;
+            let assemblyXml = `    <object id="${assemblyId}" type="model">\n      <components>\n`;
+            componentIds.forEach((compId) => {
+                assemblyXml += `        <component objectid="${compId}" />\n`;
+            });
+            assemblyXml += `      </components>\n    </object>\n`;
+            resourcesXml += assemblyXml;
+
+            buildXml += `    <item objectid="${assemblyId}" transform="${transform}" />\n`;
+        }
     });
 
     buildXml += `  </build>\n`;

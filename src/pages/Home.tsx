@@ -10,6 +10,8 @@ import {
     AlertTriangle,
     ShieldCheck,
     Zap,
+    FileCode,
+    Type,
 } from "lucide-react";
 
 export interface ToolItem {
@@ -69,14 +71,14 @@ export const RAW_TOOLS: ToolItem[] = [
     },
     {
         ref: "004",
-        name: "Fidget Clicker",
+        name: "SVG 3D Generator",
         description:
-            "Parametric modular clicker generator with integrated mechanical keyboard switch housings and SVG extruders.",
-        path: "/editor/fidget-clicker",
-        icon: <Sparkles size={24} strokeWidth={1.5} />,
-        color: "#f59e0b",
-        status: "maintenance",
-        priceHint: "Pro Plan",
+            "Upload any SVG and extrude it into a 3D-printable model. Choose Keychain Mode to append a parametric ring loop, or MX Clicker Mode to carve an exact 13.8 \u00d7 13.8\u202fmm Cherry MX switch housing with a 4.4 \u00d7 1.3\u202fmm stem cross void.",
+        path: "/editor/svg-generator",
+        icon: <FileCode size={24} strokeWidth={1.5} />,
+        color: "#a78bfa",
+        status: "stable",
+        priceHint: "Free",
     },
     {
         ref: "005",
@@ -87,6 +89,17 @@ export const RAW_TOOLS: ToolItem[] = [
         icon: <PenTool size={24} strokeWidth={1.5} />,
         color: "#ec4899",
         status: "stable",
+    },
+    {
+        ref: "006",
+        name: "Name Keychain",
+        description:
+            "Generate a 3D-printable standalone name keychain instantly. Type your name, pick a font and colour — the system builds the extruded backing plate, text layers and keychain ring automatically. Export STL or 3MF.",
+        path: "/editor/name-keychain",
+        icon: <Type size={24} strokeWidth={1.5} />,
+        color: "#ec4899",
+        status: "stable",
+        priceHint: "Free",
     },
 ];
 
@@ -201,9 +214,7 @@ const Home: React.FC = () => {
                 }}>
                 {uniqueTools.map((tool) => {
                     const status = STATUS_CONFIG[tool.status];
-                    const isDisabled =
-                        tool.status === "maintenance" ||
-                        tool.status === "upcoming";
+                    const isDisabled = tool.status === "upcoming";
 
                     const CardInnerContent = (
                         <div
